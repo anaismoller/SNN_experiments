@@ -38,7 +38,7 @@ def run_baseline_best(dump_dir, debug, seed):
     # Train baseline models on SALT #
     #################################
     list_redshift = [None, "zpho", "zspe"]
-    list_source_data = ["photometry"]
+    list_source_data = ["photometry", "saltfit"]
 
     # Train RNN models
     for (source_data,redshift) in product(list_source_data,list_redshift):
