@@ -38,7 +38,8 @@ def run_baseline_best(dump_dir, debug, seed):
     # Train baseline models on SALT #
     #################################
     list_redshift = [None, "zpho", "zspe"]
-    list_source_data = ["photometry", "saltfit"]
+    #list_source_data = ["photometry", "saltfit"]
+    list_source_data = ["saltfit"]
 
     # Train RNN models
     for (source_data,redshift) in product(list_source_data,list_redshift):
@@ -124,7 +125,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="SNIa classification")
 
     dir_path = os.path.dirname(os.path.realpath(__file__))
-    default_dump_dir = Path(dir_path).parent / "snndump"
+    default_dump_dir = Path(dir_path).parent / "cnndump"
     parser.add_argument(
         "--dump_dir",
         type=str,
