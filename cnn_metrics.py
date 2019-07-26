@@ -27,12 +27,16 @@ if __name__ == '__main__':
 
     # best configuration
     df_best = df_stats[(df_stats['model_name_noseed'].str.contains('DF_1.0'))]
-    df_best = df_best.round(2)
+    # df_best = df_best.round(2)
+    pd.set_option('max_colwidth', 400)
 
     # all accuracy
-    lu.print_green('best accuracy all')
-    pd.set_option('max_colwidth', 400)
-    print(df_best[['model_name_noseed', 'all_accuracy_mean','all_accuracy_std']])
+    lu.print_green('best accuracy all saltfit')
+    df_tmp = df_best[(df_stats['model_name_noseed'].str.contains('saltfit'))].copy()
+    print(df_tmp[['model_name_noseed', 'all_accuracy_mean','all_accuracy_std','all_auc_mean','all_auc_std']])
+    lu.print_green('best accuracy all photometry')
+    df_tmp = df_best[(df_stats['model_name_noseed'].str.contains('photometry'))].copy()
+    print(df_tmp[['model_name_noseed', 'all_accuracy_mean','all_accuracy_std']])
 
     # accuracy by number of epochs
     lu.print_green('epochs')
