@@ -68,7 +68,8 @@ def get_batch_predictions(rnn, X, target):
         maskpeak = maskpeak.cuda()
     masked_outpeak = outpeak*maskpeak
     arr_preds_peak = masked_outpeak.data.cpu().numpy()
-    arr_target_peak = target[1].detach().cpu().numpy()
+    arr_target_peak = target[1].squeeze(-1).transpose(1,0)
+    arr_target_peak = arr_target_peak.detach().cpu().numpy()
 
     arr_preds = arr_preds_class, arr_preds_peak
     arr_targets = arr_target_class, arr_target_peak
@@ -105,7 +106,8 @@ def get_batch_predictions_MFE(rnn, X, target):
         maskpeak = maskpeak.cuda()
     masked_outpeak = outpeak*maskpeak
     arr_preds_peak = masked_outpeak.data.cpu().numpy()
-    arr_target_peak = target[1].detach().cpu().numpy()
+    arr_target_peak = target[1].squeeze(-1).transpose(1,0)
+    arr_target_peak = arr_target_peak.detach().cpu().numpy()
 
     arr_preds = arr_preds_class, arr_preds_peak
     arr_targets = arr_target_class, arr_target_peak
