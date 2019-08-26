@@ -108,7 +108,16 @@ def fill_data_list(
     for i in iterator:
 
         X_all = arr_data[i].reshape(-1, n_features)
-        target = int(arr_target[i])
+
+        # classification target
+        target_class = int(arr_target[0][i])
+
+        # new target with delta peak for each time step
+        arr_time = np.cumsum(X_all[:, settings.idx_delta_time])
+        peak_mjd = arr_target[1][i]
+        target_lc_peak = peak_mjd - arr_time
+
+        target = (target_class,target_lc_peak)
         lc = int(arr_SNID[i])
 
         # Keep an unnormalized copy of the data (for test and display)
@@ -135,7 +144,6 @@ def fill_data_list(
             list_data.append((X_normed, target, lc, X_all, X_ori))
         else:
             list_data.append((X_normed, target, lc))
-
     return list_data
 
 
@@ -200,14 +208,14 @@ def load_HDF5(settings, test=False):
 
         arr_data = hf["data"][:]
         if test:
-            # ridiculous failsafe in case we have different classes in dataset/model
+            # failsafe in case we have different classes in dataset/model
             # we will always have 2 classes
             try:
-                arr_target = hf[target_key][:]
+                arr_target = hf[target_key][:],hf["PEAKMJDNORM"][:]
             except Exception:
-                arr_target = hf['target_2classes'][:]
+                arr_target = hf['target_2classes'][:],hf["PEAKMJDNORM"][:]
         else:
-            arr_target = hf[target_key][:]
+            arr_target = hf[target_key][:],hf["PEAKMJDNORM"][:]
         arr_SNID = hf["SNID"][:]
 
         if test is True:
@@ -241,7 +249,6 @@ def load_HDF5(settings, test=False):
                 n_features,
                 "Loading Validation Set",
             )
-
         return list_data_train, list_data_val
 
 
@@ -355,9 +362,11 @@ def get_data_batch(list_data, idxs, settings, max_lengths=None, OOD=None):
             assert settings.random_length is False
             assert settings.random_redshift is False
             X = X[: max_lengths[pos]]
+            target = (target[0],target[1][:max_lengths[pos]])
         if settings.random_length:
             random_length = np.random.randint(1, X.shape[0] + 1)
             X = X[:random_length]
+            target = (target[0],target[1][:random_length])
         if settings.redshift == "zspe" and settings.random_redshift:
             if np.random.binomial(1, 0.5) == 0:
                 X[:, settings.idx_specz] = -1
@@ -371,7 +380,8 @@ def get_data_batch(list_data, idxs, settings, max_lengths=None, OOD=None):
     idxs_rev_sort = np.argsort(idx_sort)  # these indices revert the sort
     max_len = list_len[idx_sort[0]]
     X_tensor = torch.zeros((max_len, len(idxs), input_dim))
-    list_target = []
+    target_peak_tensor = torch.zeros((max_len, len(idxs), 1))
+    list_target_class = []
     lengths = []
     # Assign values for the tensor
     for i, idx in enumerate(idx_sort):
@@ -381,17 +391,24 @@ def get_data_batch(list_data, idxs, settings, max_lengths=None, OOD=None):
         except Exception:
             X_tensor[: X.shape[0], i, :] = torch.FloatTensor(
                 torch.from_numpy(np.flip(X, axis=0).copy()))
-        list_target.append(target)
+        # processing targets independently
+        target_peak_tensor[: X.shape[0], i, 0] = torch.FloatTensor(target[1])
+        list_target_class.append(target[0])
         lengths.append(list_len[idx])
 
     # Move data to GPU if required
     if settings.use_cuda:
         X_tensor = X_tensor.cuda()
-        target_tensor = torch.LongTensor(list_target).cuda()
+        target_tensor_peak = target_peak_tensor.cuda()
+        target_tensor_class = torch.LongTensor(list_target_class).cuda()
 
     else:
         X_tensor = X_tensor
-        target_tensor = torch.LongTensor(list_target)
+        target_tensor_class = torch.LongTensor(list_target_class)
+        target_tensor_peak = target_peak_tensor
+
+    # target tuple
+    target_tensor = target_tensor_class,target_tensor_peak
 
     # Create a packed sequence
     packed_tensor = nn.utils.rnn.pack_padded_sequence(X_tensor, lengths)
@@ -403,8 +420,8 @@ def train_step(
     settings,
     rnn,
     packed_tensor,
-    target_tensor,
-    criterion,
+    target_tuple,
+    criterion_class,
     optimizer,
     batch_size,
     num_batches,
@@ -416,7 +433,7 @@ def train_step(
         rnn (torch.nn Model): pytorch model to train
         packed_tensor (torch PackedSequence): input tensor in packed form
         target_tensor (torch Tensor): target tensor
-        criterion (torch loss function): loss function to optimize
+        criterion_class (torch loss function): loss function to optimize
         optimizer (torch optim): the gradient descent optimizer
         batch_size (int): batch size
         num_batches (int): number of minibatches to scale KL cost in Bayesian
@@ -425,17 +442,30 @@ def train_step(
     # Set NN to train mode (deals with dropout and batchnorm)
     rnn.train()
 
+    target_class, target_peak = target_tuple
+
     # Zero out the gradients
     optimizer.zero_grad()
 
     # Forward pass
-    output = rnn(packed_tensor)
-    loss = criterion(output.squeeze(), target_tensor)
+    outclass, outpeak, mask = rnn(packed_tensor)
+    lossclass = criterion_class(outclass.squeeze(), target_class)
+
+    # reshape the outputs to (B,L)
+    outpeak = outpeak.squeeze(-1).transpose(1,0)
+    target_peak = target_peak.squeeze(-1).transpose(1,0)
+    # compute masked MSE
+    MSE = ((outpeak-target_peak).pow(2)*mask).sum()/mask.sum()
+    criterion_peak = nn.MSELoss()
+    losspeak = criterion_peak(outpeak.squeeze(), target_peak)
+
     # Special case for BayesianRNN, need to use KL loss
     if isinstance(rnn, bayesian_rnn.BayesianRNN):
-        loss = loss + rnn.kl / (num_batches * batch_size)
-    else:
-        loss = criterion(output.squeeze(), target_tensor)
+        lossclass = lossclass + rnn.kl / (num_batches * batch_size)
+    else: # TO DO, this I think can be deprecated
+        lossclass = criterion_class(outclass.squeeze(), target_class)
+
+    loss = lossclass #+ losspeak
 
     # Backward pass
     loss.backward()
@@ -509,8 +539,11 @@ def get_evaluation_metrics(settings, list_data, model, sample_size=None):
     """
 
     # Validate
-    list_pred = []
-    list_target = []
+    list_pred_class = []
+    list_pred_peak = []
+    list_target_class = []
+    list_target_peak = []
+    list_target_mask = []
     list_kl = []
     num_elem = len(list_data)
     num_batches = num_elem // min(num_elem // 2, settings.batch_size)
@@ -530,43 +563,77 @@ def get_evaluation_metrics(settings, list_data, model, sample_size=None):
             list_data, batch_idxs, settings
         )
         settings.random_length = random_length
-        output = eval_step(model, packed_tensor, X_tensor.size(1))
+        outclass, outpeak, peak_mask = eval_step(model, packed_tensor, X_tensor.size(1))
 
         if "bayesian" in settings.pytorch_model_name:
             list_kl.append(model.kl.detach().cpu().item())
 
+        # fetch targets
+        target_tensor_class, target_tensor_peak = target_tensor
+
+        # Classification
         # Apply softmax
-        pred_proba = nn.functional.softmax(output, dim=1)
-
+        pred_proba = nn.functional.softmax(outclass, dim=1)
         # Convert to numpy array
-        pred_proba = pred_proba.data.cpu().numpy()
-        target_numpy = target_tensor.data.cpu().numpy()
-
+        pred_proba_numpy = pred_proba.data.cpu().numpy()
+        target_class_numpy = target_tensor_class.data.cpu().numpy()
         # Revert sort
-        pred_proba = pred_proba[idxs_rev_sort]
-        target_numpy = target_numpy[idxs_rev_sort]
+        pred_proba_numpy = pred_proba_numpy[idxs_rev_sort]
+        target_class_numpy = target_class_numpy[idxs_rev_sort]
+        # save for later
+        list_pred_class.append(pred_proba_numpy)
+        list_target_class.append(target_class_numpy)
 
-        list_pred.append(pred_proba)
-        list_target.append(target_numpy)
-    targets = np.concatenate(list_target, axis=0)
-    preds = np.concatenate(list_pred, axis=0)
+        ###
+        # Regression
+        pred_peak_tensor = outpeak
+        # reshape (B,L) 
+        pred_peak_reshaped = pred_peak_tensor.squeeze(-1).transpose(1,0)
+        target_peak_reshaped = target_tensor_peak.squeeze(-1).transpose(1,0)
+        # Revert sort
+        pred_peak_reshaped = pred_peak_reshaped[idxs_rev_sort]
+        target_peak_reshaped = target_peak_reshaped[idxs_rev_sort]
+        peak_mask_reshaped = peak_mask[idxs_rev_sort]
+        # Flatten & convert to numpy array
+        pred_peak_numpy = pred_peak_reshaped.reshape(-1).data.cpu().numpy()
+        target_peak_numpy = target_peak_reshaped.reshape(-1).data.cpu().numpy()
+        peak_mask_numpy = peak_mask_reshaped.reshape(-1).data.cpu().numpy()
+        
+        # save for later
+        list_pred_peak.append(pred_peak_numpy)
+        list_target_peak.append(target_peak_numpy)
+        list_target_mask.append(peak_mask_numpy)
+        
+
+    targets_class = np.concatenate(list_target_class, axis=0)
+    preds_class = np.concatenate(list_pred_class, axis=0)
+    targets_peak = np.concatenate(list_target_peak, axis=0)
+    targets_peak_mask = np.concatenate(list_target_mask, axis=0)
+    preds_peak = np.concatenate(list_pred_peak, axis=0)
 
     # Check outputs size
-    assert len(targets.shape) == 1
-    assert len(preds.shape) == 2
+    assert len(targets_class.shape) == 1
+    assert len(preds_class.shape) == 2
+    assert len(targets_peak.shape) == len(targets_peak_mask.shape)
+    assert len(targets_peak.shape) == len(preds_peak.shape)
 
+
+    # classification metrics
     if settings.nb_classes == 2:
-        auc = metrics.roc_auc_score(targets, preds[:, 1])
+        auc = metrics.roc_auc_score(targets_class, preds_class[:, 1])
     else:
         # Can't compute AUC for more than 2 classes
         auc = None
-    acc = metrics.accuracy_score(targets, np.argmax(preds, 1))
-    targets_2D = np.zeros((targets.shape[0], settings.nb_classes))
-    for i in range(targets.shape[0]):
-        targets_2D[i, targets[i]] = 1
-    log_loss = metrics.log_loss(targets_2D, preds)
+    acc = metrics.accuracy_score(targets_class, np.argmax(preds_class, 1))
+    targets_class_2D = np.zeros((targets_class.shape[0], settings.nb_classes))
+    for i in range(targets_class.shape[0]):
+        targets_class_2D[i, targets_class[i]] = 1
+    log_loss = metrics.log_loss(targets_class_2D, preds_class)
 
-    d_losses = {"AUC": auc, "Acc": acc, "loss": log_loss}
+    # regression metrics
+    reg_loss = (np.power(preds_peak-targets_peak,2)*targets_peak_mask).sum()/targets_peak_mask.sum()
+
+    d_losses = {"AUC": auc, "Acc": acc, "loss": log_loss, "reg_loss": reg_loss}
 
     if len(list_kl) != 0:
         d_losses["KL"] = np.mean(list_kl)

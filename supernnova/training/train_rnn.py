@@ -135,8 +135,8 @@ def train_cyclic(settings):
 
     # Keep track of losses for plotting
     loss_str = ""
-    d_monitor_train = {"loss": [], "AUC": [], "Acc": [], "epoch": []}
-    d_monitor_val = {"loss": [], "AUC": [], "Acc": [], "epoch": []}
+    d_monitor_train = {"loss": [], "AUC": [], "Acc": [], "epoch": [], "reg_loss": []}
+    d_monitor_val = {"loss": [], "AUC": [], "Acc": [], "epoch": [], "reg_loss": []}
     if "bayesian" in settings.pytorch_model_name:
         d_monitor_train["KL"] = []
         d_monitor_val["KL"] = []
@@ -273,8 +273,8 @@ def train(settings):
 
     # Keep track of losses for plotting
     loss_str = ""
-    d_monitor_train = {"loss": [], "AUC": [], "Acc": [], "epoch": []}
-    d_monitor_val = {"loss": [], "AUC": [], "Acc": [], "epoch": []}
+    d_monitor_train = {"loss": [], "AUC": [], "Acc": [], "epoch": [], "reg_loss": []}
+    d_monitor_val = {"loss": [], "AUC": [], "Acc": [], "epoch": [], "reg_loss": []}
     if "bayesian" in settings.pytorch_model_name:
         d_monitor_train["KL"] = []
         d_monitor_val["KL"] = []
@@ -314,7 +314,7 @@ def train(settings):
                 target_tensor,
                 criterion,
                 optimizer,
-                target_tensor.size(0),
+                len(batch_idxs),
                 len(list_batches),
             )
 
