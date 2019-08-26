@@ -513,6 +513,8 @@ def save_to_HDF5(settings, df):
             dtype=np.dtype("float32"),
         )
 
+        # peakmjd target
+        df['target_lc_peak'] = df['PEAKMJDNORM']-df['delta_time']
         df.drop(columns=["time", "SNID", "PEAKMJDNORM"], inplace=True)
 
         ########################
@@ -522,7 +524,7 @@ def save_to_HDF5(settings, df):
         gnorm = hf.create_group("normalizations")
 
         # using normalization per feature
-        for feat in settings.training_features_to_normalize:
+        for feat in settings.training_features_to_normalize  + ['target_lc_peak']:
             # Log transform plus mean subtraction and standard dev subtraction
             log_standardized = log_standardization(df[feat].values)
             # Store normalization parameters
@@ -574,7 +576,7 @@ def save_to_HDF5(settings, df):
         # Fit a one hot encoder for FLT
         logging_utils.print_green("Fit onehot on FLT")
         assert sorted(df.columns.values.tolist()) == sorted(
-            list_training_features + ["FLT"]
+            list_training_features + ["FLT","target_lc_peak"]
         )
         # to have the same onehot for all datasets
         tmp = pd.Series(settings.list_filters_combination).append(df["FLT"])
