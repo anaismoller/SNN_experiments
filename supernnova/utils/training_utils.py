@@ -454,6 +454,10 @@ def train_step(
     # reshape the outputs to (B,L)
     outpeak = outpeak.squeeze(-1).transpose(1,0)
     target_peak = target_peak.squeeze(-1).transpose(1,0)
+    if settings.use_cuda:
+        outpeak = outpeak.cuda()
+        target_peak = target_peak.cuda()
+        mask = mask.cuda()
     # compute masked MSE
     MSE = ((outpeak-target_peak).pow(2)*mask).sum()/mask.sum()
     criterion_peak = nn.MSELoss()

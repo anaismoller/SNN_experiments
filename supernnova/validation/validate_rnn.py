@@ -54,11 +54,26 @@ def get_batch_predictions(rnn, X, target):
 
     """
 
-    out = rnn.forward(X)
-    arr_preds = nn.functional.softmax(out, dim=-1).data.cpu().numpy()
-    arr_target = target.detach().cpu().numpy()
+    outclass, outpeak, maskpeak = rnn.forward(X)
 
-    return arr_preds, arr_target
+    # class
+    arr_preds_class = nn.functional.softmax(
+        outclass, dim=-1).data.cpu().numpy()
+    arr_target_class = target[0].detach().cpu().numpy()
+
+    # regression
+    outpeak = outpeak.squeeze(-1).transpose(1, 0)
+    if torch.cuda.is_available():
+        outpeak = outpeak.cuda()
+        maskpeak = maskpeak.cuda()
+    masked_outpeak = outpeak*maskpeak
+    arr_preds_peak = masked_outpeak.data.cpu().numpy()
+    arr_target_peak = target[1].detach().cpu().numpy()
+
+    arr_preds = arr_preds_class, arr_preds_peak
+    arr_targets = arr_target_class, arr_target_peak
+
+    return arr_preds, arr_targets
 
 
 def get_batch_predictions_MFE(rnn, X, target):
@@ -77,11 +92,25 @@ def get_batch_predictions_MFE(rnn, X, target):
 
     """
 
-    out = rnn.forward(X, mean_field_inference=True)
-    arr_preds = nn.functional.softmax(out, dim=-1).data.cpu().numpy()
-    arr_target = target.detach().cpu().numpy()
+    outclass, outpeak, maskpeak = rnn.forward(X, mean_field_inference=True)
+    # class
+    arr_preds_class = nn.functional.softmax(
+        outclass, dim=-1).data.cpu().numpy()
+    arr_target_class = target[0].detach().cpu().numpy()
 
-    return arr_preds, arr_target
+    # regression
+    outpeak = outpeak.squeeze(-1).transpose(1, 0)
+    if torch.cuda.is_available():
+        outpeak = outpeak.cuda()
+        maskpeak = maskpeak.cuda()
+    masked_outpeak = outpeak*maskpeak
+    arr_preds_peak = masked_outpeak.data.cpu().numpy()
+    arr_target_peak = target[1].detach().cpu().numpy()
+
+    arr_preds = arr_preds_class, arr_preds_peak
+    arr_targets = arr_target_class, arr_target_peak
+
+    return arr_preds, arr_targets
 
 
 def get_predictions(settings, model_file=None):
@@ -123,7 +152,8 @@ def get_predictions(settings, model_file=None):
         f"{dump_dir}/PRED_{settings.pytorch_model_name}.pickle"
     )
 
-    rnn_state = torch.load(model_file, map_location=lambda storage, loc: storage)
+    rnn_state = torch.load(
+        model_file, map_location=lambda storage, loc: storage)
     rnn.load_state_dict(rnn_state)
     rnn.to(settings.device)
     rnn.eval()
@@ -134,7 +164,8 @@ def get_predictions(settings, model_file=None):
     # Batching stuff together
     num_elem = len(list_data_test)
     factor = (num_elem // 4) if settings.source_data == "photometry" else num_elem
-    num_batches = num_elem / min(num_elem, factor)  # to be changed for speed if needed
+    # to be changed for speed if needed
+    num_batches = num_elem / min(num_elem, factor)
     list_batches = np.array_split(np.arange(num_elem), num_batches)
 
     # Prepare output arrays
@@ -152,16 +183,16 @@ def get_predictions(settings, model_file=None):
         ]
         + [f"all_{OOD}" for OOD in du.OOD_TYPES]
     }
-    for key in ["target", "SNID"]:
+    for key in ["all_peak", "target", "target_peak", "SNID"]:
         d_pred[key] = np.zeros((num_elem, settings.num_inference_samples)).astype(
             np.int64
         )
 
     d_pred_MFE = {
         key: np.zeros((num_elem, 1, settings.nb_classes)).astype(np.float32)
-        for key in ["all"] + [f"all_{OOD}" for OOD in du.OOD_TYPES]
+        for key in ["all", "all_peak"] + [f"all_{OOD}" for OOD in du.OOD_TYPES]
     }
-    for key in ["target", "SNID"]:
+    for key in ["target", "target_peak", "SNID"]:
         d_pred_MFE[key] = np.zeros((num_elem, 1)).astype(np.int64)
 
     # Fetch SN info
@@ -199,11 +230,14 @@ def get_predictions(settings, model_file=None):
                 )
 
                 # Rever sorting that occurs in get_batch_predictions
-                arr_preds = arr_preds[idxs_rev_sort]
-                arr_target = arr_target[idxs_rev_sort]
+                arr_preds_class = arr_preds[0][idxs_rev_sort]
+                arr_preds_peak = arr_preds[1][idxs_rev_sort]
+                arr_target_class = arr_target[0][idxs_rev_sort]
+                arr_target_peak = arr_target[1][idxs_rev_sort]
 
-                d_pred["all"][start_idx:end_idx, iter_] = arr_preds
-                d_pred["target"][start_idx:end_idx, iter_] = arr_target
+                d_pred["all"][start_idx:end_idx, iter_] = arr_preds_class
+                d_pred["target"][start_idx:end_idx,
+                                       iter_] = arr_target_class
                 d_pred["SNID"][start_idx:end_idx, iter_] = SNIDs
 
             # MFE
@@ -212,11 +246,13 @@ def get_predictions(settings, model_file=None):
             )
 
             # Rever sorting that occurs in get_batch_predictions
-            arr_preds = arr_preds[idxs_rev_sort]
-            arr_target = arr_target[idxs_rev_sort]
+            arr_preds_class = arr_preds[0][idxs_rev_sort]
+            arr_preds_peak = arr_preds[1][idxs_rev_sort]
+            arr_target_class = arr_target[0][idxs_rev_sort]
+            arr_target_peak = arr_target[1][idxs_rev_sort]
 
-            d_pred_MFE["all"][start_idx:end_idx, 0] = arr_preds
-            d_pred_MFE["target"][start_idx:end_idx, 0] = arr_target
+            d_pred_MFE["all"][start_idx:end_idx, 0] = arr_preds_class
+            d_pred_MFE["target"][start_idx:end_idx, 0] = arr_target_class
             d_pred_MFE["SNID"][start_idx:end_idx, 0] = SNIDs
 
             #############################
@@ -232,7 +268,7 @@ def get_predictions(settings, model_file=None):
                 oob_idxs = np.where(np.array(slice_idxs) < 1)[0]
                 inb_idxs = np.where(np.array(slice_idxs) >= 1)[0]
 
-                if len(inb_idxs)>0:
+                if len(inb_idxs) > 0:
                     # We only carry out prediction for samples in ``inb_idxs``
                     offset_batch_idxs = [batch_idxs[b] for b in inb_idxs]
                     max_lengths = [slice_idxs[b] for b in inb_idxs]
@@ -247,13 +283,15 @@ def get_predictions(settings, model_file=None):
                         )
 
                         # Rever sorting that occurs in get_batch_predictions
-                        arr_preds = arr_preds[idxs_rev_sort]
+                        arr_preds_class = arr_preds[0][idxs_rev_sort]
+                        arr_preds_peak = arr_preds[1][idxs_rev_sort]
 
                         suffix = str(offset) if offset != 0 else ""
                         suffix = f"+{suffix}" if offset > 0 else suffix
                         col = f"PEAKMJD{suffix}"
 
-                        d_pred[col][start_idx + inb_idxs, iter_] = arr_preds
+                        d_pred[col][start_idx + inb_idxs,
+                                    iter_] = arr_preds_class
                         # For oob_idxs, no prediction can be made, fill with nan
                         d_pred[col][start_idx + oob_idxs, iter_] = np.nan
 
@@ -273,20 +311,24 @@ def get_predictions(settings, model_file=None):
                     )
 
                     # Revert sorting that occurs in get_batch_predictions
-                    arr_preds = arr_preds[idxs_rev_sort]
-                    arr_target = arr_target[idxs_rev_sort]
+                    arr_preds_class = arr_preds[0][idxs_rev_sort]
+                    arr_preds_peak = arr_preds[1][idxs_rev_sort]
+                    arr_target_class = arr_target[0][idxs_rev_sort]
+                    arr_target_peak = arr_target[1][idxs_rev_sort]
 
-                    d_pred[f"all_{OOD}"][start_idx:end_idx, iter_] = arr_preds
+                    d_pred[f"all_{OOD}"][start_idx:end_idx, iter_] = arr_preds_class
 
                 arr_preds, arr_target = get_batch_predictions_MFE(
                     rnn, packed, target_tensor
                 )
 
                 # Revert sorting that occurs in get_batch_predictions
-                arr_preds = arr_preds[idxs_rev_sort]
-                arr_target = arr_target[idxs_rev_sort]
+                arr_preds_class = arr_preds[0][idxs_rev_sort]
+                arr_preds_peak = arr_preds[1][idxs_rev_sort]
+                arr_target_class = arr_target[0][idxs_rev_sort]
+                arr_target_peak = arr_target[1][idxs_rev_sort]
 
-                d_pred_MFE[f"all_{OOD}"][start_idx:end_idx, 0] = arr_preds
+                d_pred_MFE[f"all_{OOD}"][start_idx:end_idx, 0] = arr_preds_class
 
     # Flatten all arrays and aggregate in dataframe
     d_series = {}
@@ -321,10 +363,11 @@ def get_predictions(settings, model_file=None):
         med_pred.columns = [str(col) + '_median' for col in med_pred.columns]
         std_pred = df_pred.groupby("SNID").std()
         std_pred.columns = [str(col) + '_std' for col in std_pred.columns]
-        df_bayes = pd.merge(med_pred,std_pred,on="SNID")
+        df_bayes = pd.merge(med_pred, std_pred, on="SNID")
         df_bayes["SNID"] = df_bayes.index
         df_bayes["target"] = df_bayes["target_median"]
-        bay_pred_file = prediction_file.replace(".pickle","_aggregated.pickle")
+        bay_pred_file = prediction_file.replace(
+            ".pickle", "_aggregated.pickle")
         df_bayes.to_pickle(bay_pred_file)
 
     g_pred = df_pred.groupby("SNID").median()
@@ -360,7 +403,8 @@ def get_predictions(settings, model_file=None):
     for OOD in ["random", "reverse", "shuffle", "sin"]:
         class_col_ood = [f"all_{OOD}_class{i}" for i in range(settings.nb_classes)]
         entropy_ood = (
-            -(df_pred[class_col_ood].values * np.log(df_pred[class_col_ood].values))
+            -(df_pred[class_col_ood].values *
+              np.log(df_pred[class_col_ood].values))
             .sum(1)
             .mean()
         )
@@ -390,7 +434,8 @@ def get_predictions(settings, model_file=None):
             .mean()
         )
         entropy = (
-            -(df_pred_MFE[class_col].values * np.log(df_pred_MFE[class_col].values))
+            -(df_pred_MFE[class_col].values *
+              np.log(df_pred_MFE[class_col].values))
             .sum(1)
             .mean()
         )
