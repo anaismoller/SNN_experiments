@@ -636,8 +636,9 @@ def get_evaluation_metrics(settings, list_data, model, sample_size=None):
 
     # regression metrics
     reg_loss = (np.power(preds_peak-targets_peak,2)*targets_peak_mask).sum()/targets_peak_mask.sum()
+    MSE = np.power((preds_peak-targets_peak)*targets_peak_mask,2).sum()/targets_peak_mask.sum()
 
-    d_losses = {"AUC": auc, "Acc": acc, "loss": log_loss, "reg_loss": reg_loss}
+    d_losses = {"AUC": auc, "Acc": acc, "loss": log_loss, "reg_MSE": MSE,"reg_loss": reg_loss}
 
     if len(list_kl) != 0:
         d_losses["KL"] = np.mean(list_kl)
