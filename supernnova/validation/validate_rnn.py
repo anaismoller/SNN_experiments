@@ -185,16 +185,15 @@ def get_predictions(settings, model_file=None):
         ]
         + [f"all_{OOD}" for OOD in du.OOD_TYPES]
     }
-    for key in ["all_peak", "target", "target_peak", "SNID"]:
+    for key in ["all_peak", "target", "target_peak", "SNID"] + [f"PEAKMJD{k}_peak" for k in ["-2","-1","","+1","+2"]]:
         d_pred[key] = np.zeros((num_elem, settings.num_inference_samples)).astype(
             np.int64
         )
-
     d_pred_MFE = {
         key: np.zeros((num_elem, 1, settings.nb_classes)).astype(np.float32)
-        for key in ["all", "all_peak"] + [f"all_{OOD}" for OOD in du.OOD_TYPES]
+        for key in ["all"] + [f"all_{OOD}" for OOD in du.OOD_TYPES]
     }
-    for key in ["target", "target_peak", "SNID"]:
+    for key in ["all_peak","target", "target_peak", "SNID"]+ [f"PEAKMJD{k}_peak" for k in ["-2","-1","","+1","+2"]]:
         d_pred_MFE[key] = np.zeros((num_elem, 1)).astype(np.int64)
 
     # Fetch SN info
@@ -242,12 +241,24 @@ def get_predictions(settings, model_file=None):
                                        iter_] = arr_target_class
                 d_pred["SNID"][start_idx:end_idx, iter_] = SNIDs
 
+                # to get the peak rpediction with complete light-curve
+                list_preds_peak_all = []
+                list_target_peak_all = []
+                for i in range(len(times)):
+                    idx_all =len(times[i])-1 
+                    peak_all = times[i][idx_all] + arr_preds_peak[i][idx_all]
+                    target_peak_all = times[i][idx_all] + arr_target_peak[i][idx_all]
+                    list_preds_peak_all.append(peak_all)
+                    list_target_peak_all.append(target_peak_all)
+                d_pred["all_peak"][start_idx:end_idx, iter_] = list_preds_peak_all
+                d_pred["target_peak"][start_idx:end_idx, iter_] = list_target_peak_all
+
             # MFE
             arr_preds, arr_target = get_batch_predictions_MFE(
                 rnn, packed, target_tensor
             )
 
-            # Rever sorting that occurs in get_batch_predictions
+            # Revert sorting that occurs in get_batch_predictions
             arr_preds_class = arr_preds[0][idxs_rev_sort]
             arr_preds_peak = arr_preds[1][idxs_rev_sort]
             arr_target_class = arr_target[0][idxs_rev_sort]
@@ -256,6 +267,19 @@ def get_predictions(settings, model_file=None):
             d_pred_MFE["all"][start_idx:end_idx, 0] = arr_preds_class
             d_pred_MFE["target"][start_idx:end_idx, 0] = arr_target_class
             d_pred_MFE["SNID"][start_idx:end_idx, 0] = SNIDs
+
+            # to get the peak rpediction with complete light-curve
+            list_preds_peak_all = []
+            list_target_peak_all = []
+            for i in range(len(times)):
+                idx_all =len(times[i])-1 
+                peak_all = times[i][idx_all] + arr_preds_peak[i][idx_all]
+                target_peak_all = arr_target_peak[i][idx_all]
+                list_preds_peak_all.append(peak_all)
+                list_target_peak_all.append(target_peak_all)
+            d_pred_MFE["all_peak"][start_idx:end_idx, 0] = list_preds_peak_all
+            d_pred_MFE["target_peak"][start_idx:end_idx, 0] = list_target_peak_all
+
 
             #############################
             # Predictions around PEAKMJD
@@ -296,6 +320,28 @@ def get_predictions(settings, model_file=None):
                                     iter_] = arr_preds_class
                         # For oob_idxs, no prediction can be made, fill with nan
                         d_pred[col][start_idx + oob_idxs, iter_] = np.nan
+
+                        # to get the peak rpediction with complete light-curve
+                        list_preds_peak_all = []
+                        list_target_peak_all = []
+                        for idx, count in enumerate(inb_idxs):
+                            # loop over entries that can have predictions
+                            # but we need to select the time with correct index
+                            from_zero_count = count - 1
+                            idx_length = max_lengths[from_zero_count]
+                            print(from_zero_count,idx,idx_length)
+                            idx_length = idx_length - 1
+                            peak_all = times[idx][idx_length] + arr_preds_peak[from_zero_count][idx_length]
+                            target_peak_all = arr_target_peak[i][idx_length]
+                            list_preds_peak_all.append(peak_all)
+                            list_target_peak_all.append(target_peak_all)
+
+                        suffix = str(offset) if offset != 0 else ""
+                        suffix = f"+{suffix}_peak" if offset > 0 else f"{suffix}_peak"
+                        col = f"PEAKMJD{suffix}"
+                        d_pred[col][start_idx + inb_idxs,
+                                    iter_] = list_preds_peak_all
+
 
             #############################
             # OOD predictions
