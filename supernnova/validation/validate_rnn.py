@@ -324,14 +324,12 @@ def get_predictions(settings, model_file=None):
                         # to get the peak rpediction with complete light-curve
                         list_preds_peak_all = []
                         list_target_peak_all = []
-                        for idx, count in enumerate(inb_idxs):
+                        for count, idx in enumerate(inb_idxs):
                             # loop over entries that can have predictions
                             # but we need to select the time with correct index
-                            from_zero_count = count - 1
-                            idx_length = max_lengths[from_zero_count]
-                            print(from_zero_count,idx,idx_length)
+                            idx_length = max_lengths[count]
                             idx_length = idx_length - 1
-                            peak_all = times[idx][idx_length] + arr_preds_peak[from_zero_count][idx_length]
+                            peak_all = times[idx][idx_length] + arr_preds_peak[count][idx_length]
                             target_peak_all = arr_target_peak[i][idx_length]
                             list_preds_peak_all.append(peak_all)
                             list_target_peak_all.append(target_peak_all)
