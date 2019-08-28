@@ -214,9 +214,12 @@ def get_rnn_performance_metrics_singlemodel(settings, df, host_zspe_list):
         perf_dic[f"{savekey}_zspe_purity"] = purity_zspe
         perf_dic[f"{savekey}_zspe_efficiency"] = efficiency_zspe
 
+        # regression metrics (peak prediction)
+        MSE = np.power(selection[f'{format_key}_peak']-selection[f'target_peak'],2).sum()/len(selection)
+        perf_dic[f"{savekey}_MSE_peak"] = MSE
+
     # Create a dataframe where the columns are the keys of perf_dic
     df_perf = pd.DataFrame.from_dict(perf_dic, orient="index").transpose()
-
     return df_perf
 
 
