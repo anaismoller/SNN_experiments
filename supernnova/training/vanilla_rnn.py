@@ -33,7 +33,8 @@ class VanillaRNN(torch.nn.Module):
         )
         self.output_dropout_layer = torch.nn.Dropout(self.dropout)
         self.output_class_layer = torch.nn.Linear(last_input_size, self.output_size)
-        self.output_peak_layer = torch.nn.Linear(last_input_size, 1)
+        # regression does not use mean vs standard outputs
+        self.output_peak_layer = torch.nn.Linear(self.hidden_size * bidirectional_factor, 1)
 
     def forward(self, x, mean_field_inference=False):
         # Reminder
