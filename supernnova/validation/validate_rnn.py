@@ -71,14 +71,9 @@ def get_batch_predictions(rnn, X, target,settings):
     arr_target_peak = target[1].squeeze(-1).transpose(1,0)
     arr_target_peak = arr_target_peak.detach().cpu().numpy()
 
-    print('----no norm')
-    print(arr_target_peak[0])
-
     # revert peak normalization
     if settings.peak_norm:
-        print('----unnorm')
         arr_target_peak = tu.unnormalize_arr(arr_target_peak, settings, peak_norm = True)
-        print(arr_target_peak[0])
         arr_preds_peak = tu.unnormalize_arr(arr_preds_peak, settings, peak_norm = True)
 
     arr_preds = arr_preds_class, arr_preds_peak
