@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 plt.switch_backend("agg")
 
 
-def normalize_arr(arr, settings):
+def normalize_arr(arr, settings, peak_norm = False):
     """Normalize array before input to RNN
 
     - Log transform
@@ -34,22 +34,31 @@ def normalize_arr(arr, settings):
     if settings.norm == "none":
         return arr
 
-    arr_min = settings.arr_norm[:-1, 0]
-    arr_mean = settings.arr_norm[:-1, 1]
-    arr_std = settings.arr_norm[:-1, 2]
+    if peak_norm:
+        arr_min = settings.arr_norm[-1, 0]
+        arr_mean = settings.arr_norm[-1, 1]
+        arr_std = settings.arr_norm[-1, 2]
 
-    arr_to_norm = arr[:, settings.idx_features_to_normalize]
-    # clipping
-    arr_to_norm = np.clip(arr_to_norm, arr_min, np.inf)
+        arr_to_norm = arr
+        arr_normed = (arr_to_norm - arr_mean) / arr_std
+        arr = arr_normed
+    else:
+        arr_min = settings.arr_norm[:-1, 0]
+        arr_mean = settings.arr_norm[:-1, 1]
+        arr_std = settings.arr_norm[:-1, 2]
 
-    arr_normed = np.log(arr_to_norm - arr_min + 1e-5)
-    arr_normed = (arr_normed - arr_mean) / arr_std
+        arr_to_norm = arr[:, settings.idx_features_to_normalize]
 
-    arr[:, settings.idx_features_to_normalize] = arr_normed
+        # clipping
+        arr_to_norm = np.clip(arr_to_norm, arr_min, np.inf)
+        arr_normed = np.log(arr_to_norm - arr_min + 1e-5)
+        arr_normed = (arr_normed - arr_mean) / arr_std
+        arr[:, settings.idx_features_to_normalize] = arr_normed
+
     return arr
 
 
-def unnormalize_arr(arr, settings):
+def unnormalize_arr(arr, settings, peak_norm = False):
     """UnNormalize array
 
     Args:
@@ -63,15 +72,21 @@ def unnormalize_arr(arr, settings):
     if settings.norm == "none":
         return arr
 
-    arr_min = settings.arr_norm[:-1, 0]
-    arr_mean = settings.arr_norm[:-1, 1]
-    arr_std = settings.arr_norm[:-1, 2]
-    arr_to_unnorm = arr[:, settings.idx_features_to_normalize]
-
-    arr_to_unnorm = arr_to_unnorm * arr_std + arr_mean
-    arr_unnormed = np.exp(arr_to_unnorm) + arr_min - 1E-5
-
-    arr[:, settings.idx_features_to_normalize] = arr_unnormed
+    if peak_norm:
+        arr_min = settings.arr_norm[-1, 0]
+        arr_mean = settings.arr_norm[-1, 1]
+        arr_std = settings.arr_norm[-1, 2]
+        arr_to_unnorm = arr
+        arr_unnormed = (arr_to_unnorm * arr_std)+arr_mean
+        arr = arr_unnormed
+    else:
+        arr_min = settings.arr_norm[:-1, 0]
+        arr_mean = settings.arr_norm[:-1, 1]
+        arr_std = settings.arr_norm[:-1, 2]
+        arr_to_unnorm = arr[:, settings.idx_features_to_normalize]
+        arr_to_unnorm = arr_to_unnorm * arr_std + arr_mean
+        arr_unnormed = np.exp(arr_to_unnorm) + arr_min - 1E-5
+        arr[:, settings.idx_features_to_normalize] = arr_unnormed
 
     return arr
 
@@ -116,6 +131,10 @@ def fill_data_list(
         arr_time = np.cumsum(X_all[:, settings.idx_delta_time])
         peak_mjd = arr_target[1][i]
         target_lc_peak = peak_mjd - arr_time
+
+        # normalize peak
+        if settings.peak_norm:
+            target_lc_peak = normalize_arr(target_lc_peak, settings, peak_norm = True)
 
         target = (target_class,target_lc_peak)
         lc = int(arr_SNID[i])

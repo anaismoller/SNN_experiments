@@ -154,6 +154,11 @@ def get_args():
         help="Feature normalization: global does the same norm for all filters",
     )
     parser.add_argument(
+        "--peak_norm",
+        action="store_true",
+        help="Delta peak normalization",
+    )
+    parser.add_argument(
         "--source_data",
         choices=["saltfit", "photometry"],
         default="saltfit",

@@ -38,7 +38,7 @@ def find_idx(array, value):
         return idx
 
 
-def get_batch_predictions(rnn, X, target):
+def get_batch_predictions(rnn, X, target,settings):
     """Utility to obtain predictions for a given batch
 
     Args:
@@ -71,13 +71,23 @@ def get_batch_predictions(rnn, X, target):
     arr_target_peak = target[1].squeeze(-1).transpose(1,0)
     arr_target_peak = arr_target_peak.detach().cpu().numpy()
 
+    print('----no norm')
+    print(arr_target_peak[0])
+
+    # revert peak normalization
+    if settings.peak_norm:
+        print('----unnorm')
+        arr_target_peak = tu.unnormalize_arr(arr_target_peak, settings, peak_norm = True)
+        print(arr_target_peak[0])
+        arr_preds_peak = tu.unnormalize_arr(arr_preds_peak, settings, peak_norm = True)
+
     arr_preds = arr_preds_class, arr_preds_peak
     arr_targets = arr_target_class, arr_target_peak
 
     return arr_preds, arr_targets
 
 
-def get_batch_predictions_MFE(rnn, X, target):
+def get_batch_predictions_MFE(rnn, X, target,settings):
     """Utility to obtain predictions for a given batch
 
     Args:
@@ -108,6 +118,11 @@ def get_batch_predictions_MFE(rnn, X, target):
     arr_preds_peak = masked_outpeak.data.cpu().numpy()
     arr_target_peak = target[1].squeeze(-1).transpose(1,0)
     arr_target_peak = arr_target_peak.detach().cpu().numpy()
+
+    # revert peak normalization
+    if settings.peak_norm:
+        arr_target_peak = tu.unnormalize_arr(arr_target_peak, settings, peak_norm = True)
+        arr_preds_peak = tu.unnormalize_arr(arr_preds_peak, settings, peak_norm = True)
 
     arr_preds = arr_preds_class, arr_preds_peak
     arr_targets = arr_target_class, arr_target_peak
@@ -227,7 +242,7 @@ def get_predictions(settings, model_file=None):
             for iter_ in tqdm(range(settings.num_inference_samples), ncols=100):
 
                 arr_preds, arr_target = get_batch_predictions(
-                    rnn, packed, target_tensor
+                    rnn, packed, target_tensor,settings
                 )
 
                 # Rever sorting that occurs in get_batch_predictions
@@ -255,7 +270,7 @@ def get_predictions(settings, model_file=None):
 
             # MFE
             arr_preds, arr_target = get_batch_predictions_MFE(
-                rnn, packed, target_tensor
+                rnn, packed, target_tensor,settings
             )
 
             # Revert sorting that occurs in get_batch_predictions
@@ -305,7 +320,7 @@ def get_predictions(settings, model_file=None):
                     for iter_ in tqdm(range(settings.num_inference_samples), ncols=100):
 
                         arr_preds, arr_target = get_batch_predictions(
-                            rnn, packed, target_tensor
+                            rnn, packed, target_tensor,settings
                         )
 
                         # Rever sorting that occurs in get_batch_predictions
@@ -353,7 +368,7 @@ def get_predictions(settings, model_file=None):
                 for iter_ in tqdm(range(settings.num_inference_samples), ncols=100):
 
                     arr_preds, arr_target = get_batch_predictions(
-                        rnn, packed, target_tensor
+                        rnn, packed, target_tensor,settings
                     )
 
                     # Revert sorting that occurs in get_batch_predictions
@@ -365,7 +380,7 @@ def get_predictions(settings, model_file=None):
                     d_pred[f"all_{OOD}"][start_idx:end_idx, iter_] = arr_preds_class
 
                 arr_preds, arr_target = get_batch_predictions_MFE(
-                    rnn, packed, target_tensor
+                    rnn, packed, target_tensor,settings
                 )
 
                 # Revert sorting that occurs in get_batch_predictions
@@ -541,7 +556,7 @@ def get_predictions_for_speed_benchmark(settings):
             for iter_ in tqdm(range(settings.num_inference_samples), ncols=100):
 
                 arr_preds, arr_target = get_batch_predictions(
-                    rnn, packed, target_tensor
+                    rnn, packed, target_tensor, settings
                 )
 
     total_time = time() - start_time
