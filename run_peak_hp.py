@@ -60,7 +60,7 @@ def run_baseline_hp(dump_dir, debug, seed):
     list_rnn_output_option = ["standard", "mean"]
     list_random_length = [True, False]
     list_hidden_dim = [16, 32]
-    list_peak_norm = [True, False]
+    list_peak_norm = [None, 'basic','log']
 
     if debug is True:
         list_batch_size = list_batch_size[:1]
@@ -99,7 +99,7 @@ def run_baseline_hp(dump_dir, debug, seed):
             f"--hidden_dim {hidden_dim} "
         )
         if peak_norm:
-            cmd += "--peak_norm "
+            cmd += f"--peak_norm {peak_norm} "
         run_cmd(cmd, debug, seed)
 
 

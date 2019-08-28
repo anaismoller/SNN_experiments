@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 plt.switch_backend("agg")
 
 
-def normalize_arr(arr, settings, peak_norm = False):
+def normalize_arr(arr, settings, normalize_peak = False):
     """Normalize array before input to RNN
 
     - Log transform
@@ -34,14 +34,21 @@ def normalize_arr(arr, settings, peak_norm = False):
     if settings.norm == "none":
         return arr
 
-    if peak_norm:
+    if normalize_peak:
         arr_min = settings.arr_norm[-1, 0]
         arr_mean = settings.arr_norm[-1, 1]
         arr_std = settings.arr_norm[-1, 2]
-
         arr_to_norm = arr
-        arr_normed = (arr_to_norm - arr_mean) / arr_std
+
+        if settings.peak_norm == 'basic':
+            arr_normed = (arr_to_norm - arr_mean) / arr_std
+
+        elif settings.peak_norm == 'log':
+            arr_to_norm = np.clip(arr_to_norm, arr_min, np.inf)
+            arr_normed = np.log(arr_to_norm - arr_min + 1e-5)
+            arr_normed = (arr_normed - arr_mean) / arr_std
         arr = arr_normed
+
     else:
         arr_min = settings.arr_norm[:-1, 0]
         arr_mean = settings.arr_norm[:-1, 1]
@@ -58,7 +65,7 @@ def normalize_arr(arr, settings, peak_norm = False):
     return arr
 
 
-def unnormalize_arr(arr, settings, peak_norm = False):
+def unnormalize_arr(arr, settings, normalize_peak = False):
     """UnNormalize array
 
     Args:
@@ -72,12 +79,16 @@ def unnormalize_arr(arr, settings, peak_norm = False):
     if settings.norm == "none":
         return arr
 
-    if peak_norm:
+    if normalize_peak:
         arr_min = settings.arr_norm[-1, 0]
         arr_mean = settings.arr_norm[-1, 1]
         arr_std = settings.arr_norm[-1, 2]
         arr_to_unnorm = arr
-        arr_unnormed = (arr_to_unnorm * arr_std)+arr_mean
+        if settings.peak_norm == 'basic':
+            arr_unnormed = (arr_to_unnorm * arr_std)+arr_mean
+        elif settings.peak_norm == 'log':
+            arr_to_unnorm = arr_to_unnorm * arr_std + arr_mean
+            arr_unnormed = np.exp(arr_to_unnorm) + arr_min - 1E-5
         arr = arr_unnormed
     else:
         arr_min = settings.arr_norm[:-1, 0]
@@ -134,7 +145,7 @@ def fill_data_list(
 
         # normalize peak
         if settings.peak_norm:
-            target_lc_peak = normalize_arr(target_lc_peak, settings, peak_norm = True)
+            target_lc_peak = normalize_arr(target_lc_peak, settings, normalize_peak = True)
 
         target = (target_class,target_lc_peak)
         lc = int(arr_SNID[i])

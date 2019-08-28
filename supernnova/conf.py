@@ -155,8 +155,9 @@ def get_args():
     )
     parser.add_argument(
         "--peak_norm",
-        action="store_true",
-        help="Delta peak normalization",
+        choices=[None, "basic", "log"],
+        default=None,
+        help="Delta peak normalization, basic just shifts the mean, log similar to flux",
     )
     parser.add_argument(
         "--source_data",

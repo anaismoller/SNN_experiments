@@ -73,8 +73,8 @@ def get_batch_predictions(rnn, X, target,settings):
 
     # revert peak normalization
     if settings.peak_norm:
-        arr_target_peak = tu.unnormalize_arr(arr_target_peak, settings, peak_norm = True)
-        arr_preds_peak = tu.unnormalize_arr(arr_preds_peak, settings, peak_norm = True)
+        arr_target_peak = tu.unnormalize_arr(arr_target_peak, settings, normalize_peak = True)
+        arr_preds_peak = tu.unnormalize_arr(arr_preds_peak, settings, normalize_peak = True)
 
     arr_preds = arr_preds_class, arr_preds_peak
     arr_targets = arr_target_class, arr_target_peak
@@ -116,8 +116,8 @@ def get_batch_predictions_MFE(rnn, X, target,settings):
 
     # revert peak normalization
     if settings.peak_norm:
-        arr_target_peak = tu.unnormalize_arr(arr_target_peak, settings, peak_norm = True)
-        arr_preds_peak = tu.unnormalize_arr(arr_preds_peak, settings, peak_norm = True)
+        arr_target_peak = tu.unnormalize_arr(arr_target_peak, settings, normalize_peak = True)
+        arr_preds_peak = tu.unnormalize_arr(arr_preds_peak, settings, normalize_peak = True)
 
     arr_preds = arr_preds_class, arr_preds_peak
     arr_targets = arr_target_class, arr_target_peak
