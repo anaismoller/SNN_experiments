@@ -258,7 +258,7 @@ class ExperimentSettings:
 
             with h5py.File(self.hdf5_file_name, "r") as hf:
 
-                for f in self.training_features_to_normalize:
+                for f in self.training_features_to_normalize + ['target_lc_peak']:
 
                     if self.norm == "perfilter":
 

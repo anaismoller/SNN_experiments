@@ -282,7 +282,7 @@ def make_early_prediction(settings, nb_lcs=1, do_gifs=False):
                 #check if normalization converges
                 # using clipping in case of min<model_min
                 X_clip = X_ori.copy()
-                X_clip = np.clip(X_clip[:,settings.idx_features_to_normalize], settings.arr_norm[:, 0], np.inf)
+                X_clip = np.clip(X_clip[:,settings.idx_features_to_normalize], settings.arr_norm[:-1, 0], np.inf)
                 X_ori[:,settings.idx_features_to_normalize] = X_clip
                 assert np.all(np.all(np.isclose(np.ravel(X_ori), np.ravel(X_unnormed), atol=1e-1)))
 

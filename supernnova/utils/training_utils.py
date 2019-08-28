@@ -34,9 +34,9 @@ def normalize_arr(arr, settings):
     if settings.norm == "none":
         return arr
 
-    arr_min = settings.arr_norm[:, 0]
-    arr_mean = settings.arr_norm[:, 1]
-    arr_std = settings.arr_norm[:, 2]
+    arr_min = settings.arr_norm[:-1, 0]
+    arr_mean = settings.arr_norm[:-1, 1]
+    arr_std = settings.arr_norm[:-1, 2]
 
     arr_to_norm = arr[:, settings.idx_features_to_normalize]
     # clipping
@@ -63,9 +63,9 @@ def unnormalize_arr(arr, settings):
     if settings.norm == "none":
         return arr
 
-    arr_min = settings.arr_norm[:, 0]
-    arr_mean = settings.arr_norm[:, 1]
-    arr_std = settings.arr_norm[:, 2]
+    arr_min = settings.arr_norm[:-1, 0]
+    arr_mean = settings.arr_norm[:-1, 1]
+    arr_std = settings.arr_norm[:-1, 2]
     arr_to_unnorm = arr[:, settings.idx_features_to_normalize]
 
     arr_to_unnorm = arr_to_unnorm * arr_std + arr_mean
@@ -127,7 +127,7 @@ def fill_data_list(
         # using clipping in case of min<model_min
         X_clip = X_all.copy()
         X_clip = np.clip(
-            X_clip[:, settings.idx_features_to_normalize], settings.arr_norm[:, 0], np.inf)
+            X_clip[:, settings.idx_features_to_normalize], settings.arr_norm[:-1, 0], np.inf)
         X_all[:, settings.idx_features_to_normalize] = X_clip
 
         X_tmp = unnormalize_arr(normalize_arr(
