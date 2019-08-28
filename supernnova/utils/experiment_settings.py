@@ -133,6 +133,8 @@ class ExperimentSettings:
             name += "_C"
         if self.weight_decay > 0:
             name += f"_WD_{self.weight_decay}"
+        if self.peak_norm:
+            name += "_PN"
 
         self.pytorch_model_name = name
         self.rnn_dir = f"{self.models_dir}/{self.pytorch_model_name}"
@@ -372,6 +374,8 @@ class PlasticcSettings(object):
             name += "_C"
         if self.weight_decay > 0:
             name += f"_WD_{self.weight_decay}"
+        if self.peak_norm:
+            name += "_PN"
 
         if self.train_plasticc:
             os.makedirs(os.path.join(self.models_dir, name), exist_ok=True)
