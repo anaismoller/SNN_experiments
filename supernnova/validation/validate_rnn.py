@@ -140,7 +140,7 @@ def get_predictions(settings, model_file=None):
         settings (ExperimentSettings): custom class to hold hyperparameters
         model_file (str): Path to saved model weights. Default: ``None``
     """
-
+    settings.random_start = False
     settings.random_length = False
     settings.random_redshift = False
 
@@ -514,7 +514,7 @@ def get_predictions_for_speed_benchmark(settings):
     Args:
         settings (ExperimentSettings): custom class to hold hyperparameters
     """
-
+    settings.random_start = False
     settings.random_length = False
 
     if "vanilla" in settings.pytorch_model_name:

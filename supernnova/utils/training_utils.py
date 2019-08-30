@@ -394,9 +394,17 @@ def get_data_batch(list_data, idxs, settings, max_lengths=None, OOD=None):
             X = X[: max_lengths[pos]]
             target = (target[0],target[1][:max_lengths[pos]])
         if settings.random_length:
+            # random length of lc
             random_length = np.random.randint(1, X.shape[0] + 1)
             X = X[:random_length]
             target = (target[0],target[1][:random_length])
+        if settings.random_start:
+            # random start of light-curve to avoid biasing the peak prediction
+            # at least 3 epochs left
+            if X.shape[0] > 3:
+                random_start = np.random.randint(0, X.shape[0]-3)
+                X = X[random_start:]
+                target = (target[0],target[1][random_start:])
         if settings.redshift == "zspe" and settings.random_redshift:
             if np.random.binomial(1, 0.5) == 0:
                 X[:, settings.idx_specz] = -1

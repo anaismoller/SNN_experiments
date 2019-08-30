@@ -244,6 +244,11 @@ def get_args():
         help="Use random length sequences for training",
     )
     parser.add_argument(
+        "--random_start",
+        action = 'store_true',
+        help="Use random start length sequences for training (for peak)",
+    )
+    parser.add_argument(
         "--random_redshift",
         action="store_true",
         help="In PLASTICC, randomly set spectroscopic redshift to -1 (i.e. unknown)",
