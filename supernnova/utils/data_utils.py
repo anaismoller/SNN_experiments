@@ -514,7 +514,7 @@ def save_to_HDF5(settings, df):
         )
 
         # peakmjd target
-        df['target_lc_peak'] = df['PEAKMJDNORM']-df['delta_time']
+        df['target_lc_peak'] = df['PEAKMJDNORM']-df['time']
         df.drop(columns=["time", "SNID", "PEAKMJDNORM"], inplace=True)
 
         ########################
