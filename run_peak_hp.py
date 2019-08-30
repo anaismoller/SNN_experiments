@@ -103,6 +103,35 @@ def run_baseline_hp(dump_dir, debug, seed):
         run_cmd(cmd, debug, seed)
 
 
+def run_baseline_tmp(dump_dir, debug, seed):
+
+    lu.print_green(f"SEED {seed}: BASELINE HP")
+
+    if seed != LIST_SEED[0]:
+        return
+
+    list_peak_norm = [None, 'basic','log']
+    list_random_start = [False,True]
+
+    for (
+        peak_norm,
+        random_start,
+    ) in product(
+        list_peak_norm,
+        list_random_start,
+    ):
+        cmd = (
+            f"python -W ignore run.py --train_rnn "
+            f"--dump_dir {dump_dir} "
+            f"--cyclic "
+        )
+        if peak_norm:
+            cmd += f"--peak_norm {peak_norm} "
+        if random_start:
+            cmd += f"--random_start"
+        run_cmd(cmd, debug, seed)
+
+
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="SNIa classification")
@@ -151,9 +180,10 @@ if __name__ == "__main__":
             ############################
             # Data
             ############################
-            run_data(args.dump_dir, args.raw_dir, args.fits_dir, args.debug, seed)
+            # run_data(args.dump_dir, args.raw_dir, args.fits_dir, args.debug, seed)
 
             ##################
             # Hyperparams
             ##################
-            run_baseline_hp(args.dump_dir, args.debug, seed)
+            # run_baseline_hp(args.dump_dir, args.debug, seed)
+            run_baseline_tmp(args.dump_dir, args.debug, seed)
