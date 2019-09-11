@@ -32,9 +32,11 @@ class VanillaRNN(torch.nn.Module):
             bidirectional=self.bidirectional,
         )
         self.output_dropout_layer = torch.nn.Dropout(self.dropout)
-        self.output_class_layer = torch.nn.Linear(last_input_size, self.output_size)
+        self.output_class_layer = torch.nn.Linear(
+            last_input_size, self.output_size)
         # regression does not use mean vs standard outputs
-        self.output_peak_layer = torch.nn.Linear(self.hidden_size * bidirectional_factor, 1)
+        self.output_peak_layer = torch.nn.Linear(
+            self.hidden_size * bidirectional_factor, 1)
 
     def forward(self, x, mean_field_inference=False):
         # Reminder
@@ -67,31 +69,33 @@ class VanillaRNN(torch.nn.Module):
                 hn = hidden[0]
             else:
                 hn = hidden
-
-            hn = hn.permute(1, 2, 0).contiguous()
             # hn is (num_layers * num_directions, batch, hidden_size)
-            batch_size = hn.shape[0]
+            hn = hn.permute(1, 2, 0).contiguous()
             # hn now is (batch, hidden size, num_layers * num_directions)
+            batch_size = hn.shape[0]
             x_class = hn.view(batch_size, -1)
             # x_class is (batch, hidden size * num_layers * num_directions)
 
         if self.rnn_output_option == "mean":
             if isinstance(x, torch.nn.utils.rnn.PackedSequence):
                 x_class, lens = torch.nn.utils.rnn.pad_packed_sequence(x)
-                # x is (seq_len, batch, hidden size)
+                # x_class is (seq_len, batch, hidden size * num_directions)
 
                 # take mean over seq_len
-                x_class = x_class.sum(0) / lens.unsqueeze(-1).float().to(x_class.device)
-                # x_class is (batch, hidden_size)
+                x_class = x_class.sum(
+                    0) / lens.unsqueeze(-1).float().to(x_class.device)
+                # x_class is (batch, hidden_size * num_directions)
             else:
                 x_class = x.mean(0)
 
         # Peak prediction
+        # for each time step, we predict a peak light distance
+        # it doesnt make sense to do in this case mean pooling or just taking the last hidden state
         if isinstance(x, torch.nn.utils.rnn.PackedSequence):
             x_unpacked, lens = torch.nn.utils.rnn.pad_packed_sequence(x)
             outpeak = self.output_peak_layer(x_unpacked)
             # now I need to mask padded values
-            mask = (torch.arange(lens.max().item()).view(1,-1))
+            mask = (torch.arange(lens.max().item()).view(1, -1))
             lens = lens.view(-1, 1).float()
             # lens == (B, 1)
             # torch.arange == (1, max_len)
