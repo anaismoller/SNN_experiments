@@ -28,7 +28,7 @@ def get_predictions(settings, dict_rnn, X, target, OOD=None):
         X_tensor.cuda()
 
     seq_len = X_tensor.shape[0]
-    d_pred = {key: {"prob": []} for key in dict_rnn}
+    d_pred = {key: {"prob": [], "peak": []} for key in dict_rnn}
 
     # Loop over light curve time steps to obtain prediction for each time step
     for i in range(1, seq_len + 1):
@@ -58,6 +58,7 @@ def get_predictions(settings, dict_rnn, X, target, OOD=None):
 
             # Add to buffer list
             d_pred[model_type]["prob"].append(pred_proba)
+            d_pred[model_type]["peak"].append(outpeak.data.cpu().numpy())
 
     # Stack
     for key in dict_rnn.keys():
@@ -77,7 +78,7 @@ def plot_predictions(
 ):
 
     plt.figure()
-    gs = gridspec.GridSpec(2, 1)
+    gs = gridspec.GridSpec(3, 1)
     # Plot the lightcurve
     ax = plt.subplot(gs[0])
     for flt in d_plot.keys():
@@ -144,9 +145,22 @@ def plot_predictions(
                 color=color,
                 alpha=0.2,
             )
+    # ax.set_xlabel("Time (MJD)")
+    ax.set_ylabel("classification probability")
+
+    # plto peak MJD preds
+    ax = plt.subplot(gs[2])
+    list_peak_pred = [d_pred[key]["peak"][i][0][0][0] for i in range(len(d_pred[key]['peak']))]
+    ax.plot(
+                arr_time,
+                list_peak_pred,
+                color=color,
+                linestyle=linestyle,
+            )
+
 
     ax.set_xlabel("Time (MJD)")
-    ax.set_ylabel("classification probability")
+    ax.set_ylabel("peak prediction")
     # Add PEAKMJD
     if OOD is None and not settings.data_testing and arr_time.min()<peak_MJD and peak_MJD>arr_time.max():
         ax.plot([peak_MJD, peak_MJD], [0, 1], "k--", label="Peak MJD")
