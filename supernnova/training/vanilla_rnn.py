@@ -1,5 +1,5 @@
 import torch
-
+import torch.nn.functional as F
 
 class VanillaRNN(torch.nn.Module):
 
@@ -93,6 +93,8 @@ class VanillaRNN(torch.nn.Module):
         # it doesnt make sense to do in this case mean pooling or just taking the last hidden state
         if isinstance(x, torch.nn.utils.rnn.PackedSequence):
             x_unpacked, lens = torch.nn.utils.rnn.pad_packed_sequence(x)
+            # non linearity
+            x_unpacked = F.relu(x_unpacked)
             outpeak = self.output_peak_layer(x_unpacked)
             # now I need to mask padded values
             mask = (torch.arange(lens.max().item()).view(1, -1))
@@ -104,6 +106,7 @@ class VanillaRNN(torch.nn.Module):
             # max_len = 4
             maskpeak = (mask.float() < lens).float()
         else:
+            x = F.relu(x)
             outpeak = self.output_peak_layer(x)
             maskpeak = None
 
