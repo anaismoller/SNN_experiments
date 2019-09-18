@@ -231,11 +231,10 @@ def save_normalizations(settings):
     """
 
     dic_norm = {}
-    for i, f in enumerate(settings.training_features_to_normalize):
+    for i, f in enumerate(settings.training_features_to_normalize + ['peak']):
         dic_norm[f] = {}
         for j, w in enumerate(['min', 'mean', 'std']):
             dic_norm[f][w] = float(settings.arr_norm[i, j])
-
     fname = f"{Path(settings.rnn_dir)}/data_norm.json"
     with open(fname, "w") as f:
         json.dump(dic_norm, f, indent=4, sort_keys=True)

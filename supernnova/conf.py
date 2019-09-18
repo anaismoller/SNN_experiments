@@ -450,7 +450,7 @@ def get_norm_from_model(model_file, settings):
     with open(norm_file, "r") as f:
         norm_args = json.load(f)
         list_norm = []
-        for f in settings.training_features_to_normalize:
+        for f in settings.training_features_to_normalize + ['peak']:
             minv = norm_args[f]['min']
             meanv = norm_args[f]['mean']
             stdv = norm_args[f]['std']

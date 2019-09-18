@@ -58,7 +58,8 @@ def get_predictions(settings, dict_rnn, X, target, OOD=None):
 
             # Add to buffer list
             d_pred[model_type]["prob"].append(pred_proba)
-            d_pred[model_type]["peak"].append(outpeak.data.cpu().numpy())
+            # only last peak
+            d_pred[model_type]["peak"].append(float(outpeak.data.cpu().numpy()[-1]))
 
     # Stack
     for key in dict_rnn.keys():
@@ -147,27 +148,32 @@ def plot_predictions(
             )
     # ax.set_xlabel("Time (MJD)")
     ax.set_ylabel("classification probability")
-
-    # plto peak MJD preds
-    ax = plt.subplot(gs[2])
-    list_peak_pred = [d_pred[key]["peak"][i][0][0][0] for i in range(len(d_pred[key]['peak']))]
-    ax.plot(
-                arr_time,
-                list_peak_pred,
-                color=color,
-                linestyle=linestyle,
-            )
-
-
-    ax.set_xlabel("Time (MJD)")
-    ax.set_ylabel("peak prediction")
-    # Add PEAKMJD
     if OOD is None and not settings.data_testing and arr_time.min()<peak_MJD and peak_MJD>arr_time.max():
         ax.plot([peak_MJD, peak_MJD], [0, 1], "k--", label="Peak MJD")
     ax.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.0)
 
-    prefix = f"OOD_{OOD}_" if OOD is not None else ""
+    # plot peak MJD preds
+    ax = plt.subplot(gs[2])
+    #truth
+    ax.plot(
+                arr_time,
+                target[1],
+                color='grey',
+                linestyle='dotted',
+            )
+    # predicted
+    ax.plot(
+                arr_time,
+                d_pred[key]["peak"],
+                color=color,
+                linestyle=linestyle,
+            )
+    
 
+    ax.set_xlabel("Time (MJD)")
+    ax.set_ylabel("peak prediction")
+    
+    prefix = f"OOD_{OOD}_" if OOD is not None else ""
     if len(settings.model_files) > 1:
         fig_path = f"{settings.figures_dir}/{prefix}multi_model_early_prediction"
         fig_name = f"{prefix}multi_model_{SNID}.png"
