@@ -498,6 +498,15 @@ def train_step(
         mask = mask.cuda()
 
     # compute masked MSE
+
+    # tmp mask only using last element
+    tmp = torch.zeros(mask.shape)
+    # find length of last element in mask
+    max_lengths = (mask==1).sum(dim=1) - 1
+    for i in range(tmp.size(0)):
+        tmp[i][int(max_lengths[i])]=1
+    mask = tmp
+
     losspeak = ((outpeak-target_peak).pow(2)*mask).sum()/mask.sum()
 
     # Special case for BayesianRNN, need to use KL loss
