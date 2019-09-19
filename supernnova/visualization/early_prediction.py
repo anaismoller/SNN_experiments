@@ -297,6 +297,11 @@ def make_early_prediction(settings, nb_lcs=1, do_gifs=False):
                 )
             # X here has been normalized. We unnormalize X
             X_unnormed = tu.unnormalize_arr(X_normed, settings)
+            # need to do similarly for peak both prediction and target
+            for key in  d_pred.keys():
+                d_pred[key]['peak'] = tu.unnormalize_arr(np.array(d_pred[key]['peak']), settings,normalize_peak = True)
+                target = target[0], tu.unnormalize_arr(target[1], settings,normalize_peak = True)
+
             # Check we do recover X_ori when OOD is None
             if OOD is None:
                 #check if normalization converges
