@@ -496,10 +496,9 @@ def train_step(
         outpeak = outpeak.cuda()
         target_peak = target_peak.cuda()
         mask = mask.cuda()
+
     # compute masked MSE
-    MSE = ((outpeak-target_peak).pow(2)*mask).sum()/mask.sum()
-    criterion_peak = nn.MSELoss()
-    losspeak = criterion_peak(outpeak.squeeze(), target_peak)
+    losspeak = ((outpeak-target_peak).pow(2)*mask).sum()/mask.sum()
 
     # Special case for BayesianRNN, need to use KL loss
     if isinstance(rnn, bayesian_rnn.BayesianRNN):
