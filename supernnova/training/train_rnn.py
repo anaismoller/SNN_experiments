@@ -327,10 +327,10 @@ def train(settings):
                 settings, list_data_val, rnn, sample_size=None
             )
 
-            end_condition = plateau_accuracy.step(
-                d_losses_val["Acc"], optimizer)
-            if end_condition is True:
-                break
+            # end_condition = plateau_accuracy.step(
+            #     d_losses_val["Acc"], optimizer)
+            # if end_condition is True:
+            #     break
 
             # Add current loss avg to list of losses
             for key in d_losses_train.keys():

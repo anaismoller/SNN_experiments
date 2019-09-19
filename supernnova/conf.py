@@ -457,4 +457,10 @@ def get_norm_from_model(model_file, settings):
             list_norm.append([minv, meanv, stdv])
     settings.arr_norm = np.array(list_norm)
 
+    # use the same norm for peak
+    cli_file = Path(model_file).parent / "cli_args.json"
+    with open(cli_file, "r") as f:
+        cli_args = json.load(f)
+    settings.peak_norm = cli_args['peak_norm']
+
     return settings

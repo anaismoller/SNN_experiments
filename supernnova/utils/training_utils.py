@@ -506,7 +506,8 @@ def train_step(
     else: # TO DO, this I think can be deprecated
         lossclass = criterion_class(outclass.squeeze(), target_class)
 
-    loss = lossclass + losspeak
+    # loss = lossclass + losspeak
+    loss = losspeak
 
     # Backward pass
     loss.backward()
