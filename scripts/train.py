@@ -209,7 +209,7 @@ def train():
     epoch_train_losses = []
     epoch_valid_losses = []
 
-    for epoch in range(10000):
+    for epoch in range(200):
 
         train_loss = batch_loop(
             model, opt, list_data_train, list_features, grad_enabled=True
@@ -231,11 +231,10 @@ def train():
         plt.clf()
         plt.close("all")
 
-        if epoch % 50 == 0:
+        if epoch % 10 == 0:
             plot_predictions(model, list_data_train, list_features, "train")
             plot_predictions(model, list_data_val, list_features, "val")
-
-        if epoch % 10 == 0:
+            
             torch.save(
                         model.state_dict(),
                         f"{settings.dump_dir}/models/model.pt",
