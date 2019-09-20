@@ -76,8 +76,8 @@ def data_loader(settings):
         n_samples = hf["data"].shape[0]
 
         idxs = np.random.permutation(n_samples)
-        idxs_train = idxs[: n_samples // 2][:50]
-        idxs_val = idxs[n_samples // 2 :][:50]
+        idxs_train = idxs[: n_samples // 2]
+        idxs_val = idxs[n_samples // 2 :]
 
         n_features = hf["data"].attrs["n_features"]
 
@@ -114,7 +114,7 @@ def batch_loop(model, opt, list_data, list_features, grad_enabled=True):
     device = "cpu" if not torch.cuda.is_available() else "cuda"
 
     input_size = len(list_features)
-    batch_size = 32
+    batch_size = 500
     n_samples = len(list_data)
     num_batches = max(1, n_samples // batch_size)
     list_batches = np.array_split(np.arange(n_samples), num_batches)
@@ -221,20 +221,25 @@ def train():
         epoch_train_losses.append(train_loss)
         epoch_valid_losses.append(valid_loss)
 
-        print(f"Training loss: {train_loss:.2f} -- Valid loss: {valid_loss:.2f}")
+        print(f"{epoch} Training loss: {train_loss:.2f} -- Valid loss: {valid_loss:.2f}")
 
         plt.figure()
         plt.plot(epoch_train_losses, label="Train loss")
         plt.plot(epoch_valid_losses, label="Valid loss")
         plt.legend()
-        plt.savefig("loss_peak.png")
+        plt.savefig(f"{settings.dump_dir}/models/loss_peak.png")
         plt.clf()
         plt.close("all")
 
-        if epoch % 200 == 0:
+        if epoch % 50 == 0:
             plot_predictions(model, list_data_train, list_features, "train")
             plot_predictions(model, list_data_val, list_features, "val")
 
+        if epoch % 10 == 0:
+            torch.save(
+                        model.state_dict(),
+                        f"{settings.dump_dir}/models/model.pt",
+                    )
 
 def plot_predictions(model, list_data, list_features, title):
 
@@ -303,7 +308,7 @@ def plot_predictions(model, list_data, list_features, title):
         # predicted
         ax.plot(df["time"], Y_pred[idx, : len(df)], color="C0")
 
-        plt.savefig(f"figures/lightcurve_{title}_{idx}.png")
+        plt.savefig(f"tests/dump/lightcurves/{title}_{idx}.png")
 
 
 if __name__ == "__main__":
