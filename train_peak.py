@@ -73,8 +73,10 @@ def data_loader(settings):
 
         config_name = f"{settings.source_data}_{settings.nb_classes}classes"
 
-        n_samples = int(hf["data"].shape[0]*settings.data_fraction)
+        n_samples = hf["data"].shape[0]
+
         idxs = np.random.permutation(n_samples)
+        idxs = idxs[:]
         idxs_train = idxs[: n_samples // 2]
         idxs_val = idxs[n_samples // 2 :]
 
@@ -184,7 +186,7 @@ def train():
     settings = conf.get_settings()
 
     # device = "cpu" if not torch.cuda.is_available() else "cuda"
-    device = 'gpu' if settings.use_cuda else 'cpu'
+    device = 'cuda' if settings.use_cuda else 'cpu'
 
     list_data_train, list_data_val = data_loader(settings)
 
@@ -245,7 +247,7 @@ def train():
 def plot_predictions(model, list_data, list_features, title, settings):
 
     # device = "cpu" if not torch.cuda.is_available() else "cuda"
-    device = 'gpu' if settings.use_cuda else 'cpu'
+    device = 'cuda' if settings.use_cuda else 'cpu'
 
     input_size = len(list_features)
     idxs = np.random.choice(len(list_data), 8)
