@@ -177,12 +177,15 @@ def train():
 
     Args:
         settings (ExperimentSettings): controls experiment hyperparameters
+        device (str): default cpu else cuda
+        debug (Bool): if debug just run 10 epochs
     """
 
     # Get conf parameters
     settings = conf.get_settings()
 
-    device = "cpu" if not torch.cuda.is_available() else "cuda"
+    # device = "cpu" if not torch.cuda.is_available() else "cuda"
+    device = 'gpu' if settings.use_cuda else 'cpu'
 
     list_data_train, list_data_val = data_loader(settings)
 
@@ -209,7 +212,7 @@ def train():
     epoch_train_losses = []
     epoch_valid_losses = []
 
-    for epoch in range(200):
+    for epoch in range(settings.nb_epoch):
 
         train_loss = batch_loop(
             model, opt, list_data_train, list_features, grad_enabled=True
@@ -232,17 +235,18 @@ def train():
         plt.close("all")
 
         if epoch % 10 == 0:
-            plot_predictions(model, list_data_train, list_features, "train")
-            plot_predictions(model, list_data_val, list_features, "val")
+            plot_predictions(model, list_data_train, list_features, "train", settings)
+            plot_predictions(model, list_data_val, list_features, "val", settings)
             
             torch.save(
                         model.state_dict(),
                         f"{settings.dump_dir}/models/model.pt",
                     )
 
-def plot_predictions(model, list_data, list_features, title):
+def plot_predictions(model, list_data, list_features, title, settings):
 
-    device = "cpu" if not torch.cuda.is_available() else "cuda"
+    # device = "cpu" if not torch.cuda.is_available() else "cuda"
+    device = 'gpu' if settings.use_cuda else 'cpu'
 
     input_size = len(list_features)
     idxs = np.random.choice(len(list_data), 8)
