@@ -1,243 +1,88 @@
-import torch
 import json
 import numpy as np
-import torch.nn as nn
 from tqdm import tqdm
 from time import time
 from pathlib import Path
 from ..utils import training_utils as tu
 from ..utils import logging_utils as lu
 
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 
-def get_lr(settings):
-    """Select optimal starting learning rate when training with a 1-cycle policy
 
-    Args:
-        settings (ExperimentSettings): controls experiment hyperparameters
-    """
+DEVICE = "cpu" if not torch.cuda.is_available() else "cuda"
 
-    # Data
-    list_data_train, list_data_val = tu.load_HDF5(settings, test=False)
 
-    num_elem = len(list_data_train)
-    num_batches = num_elem // min(num_elem // 2, settings.batch_size)
-    list_batches = np.array_split(np.arange(num_elem), num_batches)
-    np.random.shuffle(list_batches)
+class VanillaRNN(torch.nn.Module):
+    def __init__(self, input_size):
+        super(VanillaRNN, self).__init__()
 
-    lr_init_value = 1e-8
-    lr = float(lr_init_value)
-    lr_final_value = 10.0
-    beta = 0.98
-    avg_loss = 0.0
-    best_loss = 0.0
-    batch_num = 0
-    list_losses = []
-    list_lr = []
-    mult = (lr_final_value / lr_init_value) ** (1 / num_batches)
-
-    settings.learning_rate = lr_init_value
-
-    # Model specification
-    rnn = tu.get_model(settings, len(settings.training_features))
-    criterion = nn.CrossEntropyLoss()
-    optimizer = tu.get_optimizer(settings, rnn)
-
-    # Prepare for GPU if required
-    if settings.use_cuda:
-        rnn.cuda()
-        criterion.cuda()
-
-    for batch_idxs in tqdm(list_batches, ncols=100):
-
-        batch_num += 1
-
-        # Sample a batch in packed sequence form
-        packed, _, target_tensor, idxs_rev_sort = tu.get_data_batch(
-            list_data_train, batch_idxs, settings
+        # Define layers
+        self.rnn_layer = torch.nn.LSTM(
+            input_size,
+            128,
+            num_layers=2,
+            dropout=0,
+            bidirectional=True,
+            batch_first=True,
         )
-        # Train step : forward backward pass
-        loss = tu.train_step(
-            settings,
-            rnn,
-            packed,
-            target_tensor,
-            criterion,
-            optimizer,
-            len(batch_idxs),
-            len(list_batches),
+        # self.output_class_layer = torch.nn.Linear()
+        # # regression does not use mean vs standard outputs
+        self.output_peak_layer = torch.nn.Linear(2 * 128, 1)
+
+    def forward(self, x, x_mask):
+
+        # x is (B, L, D)
+        # x_mask is (B, L)
+
+        lengths = x_mask.sum(dim=-1).long()
+
+        # Pack
+        x_packed = torch.nn.utils.rnn.pack_padded_sequence(
+            x, lengths, batch_first=True, enforce_sorted=False
         )
-        loss = loss.detach().cpu().numpy().item()
 
-        # Compute the smoothed loss
-        avg_loss = beta * avg_loss + (1 - beta) * loss
-        smoothed_loss = avg_loss / (1 - beta ** batch_num)
-        # Stop if the loss is exploding
-        if batch_num > 1 and smoothed_loss > 4 * best_loss:
-            break
-        # Record the best loss
-        if smoothed_loss < best_loss or batch_num == 1:
-            best_loss = smoothed_loss
-        # Store the values
-        list_losses.append(smoothed_loss)
-        list_lr.append(lr)
-        # Update the lr for the next step
-        lr *= mult
+        x_packed, hidden = self.rnn_layer(x_packed)
 
-        # Set learning rate
-        for param_group in optimizer.param_groups:
+        # unpack
+        x_padded, _ = torch.nn.utils.rnn.pad_packed_sequence(x_packed, batch_first=True)
+        # x_padded is (B, L, D)
 
-            param_group["lr"] = lr
+        x_pred = self.output_peak_layer(x_padded)
 
-    idx_min = np.argmin(list_losses)
-    print("Min loss", list_losses[idx_min], "LR", list_lr[idx_min])
-
-    return list_lr[idx_min]
+        return x_pred
 
 
-def train_cyclic(settings):
-    """Train RNN models with a 1-cycle policy
+def get_data_batch(list_data, batch_idxs, settings):
 
-    Args:
-        settings (ExperimentSettings): controls experiment hyperparameters
-    """
-    # save training data config
-    save_normalizations(settings)
+    start, end = batch_idxs[0], batch_idxs[-1] + 1
 
-    max_learning_rate = get_lr(settings) / 10
-    min_learning_rate = max_learning_rate / 10
-    settings.learning_rate = min_learning_rate
-    print("Setting learning rate to", min_learning_rate)
+    data = list_data[start:end]
 
-    def one_cycle_sched(epoch, minv, maxv, phases):
-        if epoch <= phases[0]:
-            out = minv + (maxv - minv) / (phases[0]) * epoch
-        elif phases[0] < epoch <= phases[1]:
-            increment = (minv - maxv) / (phases[1] - phases[0])
-            out = maxv + increment * (epoch - phases[0])
-        else:
-            increment = (minv / 100 - minv) / (phases[2] - phases[1])
-            out = minv + increment * (epoch - phases[1])
+    batch_size = len(batch_idxs)
+    input_size = data[0][0].shape[-1]
+    max_length = max([len(x[0]) for x in data])
 
-        return out
+    X = np.zeros((batch_size, max_length, input_size), dtype=np.float32)
+    Y = np.zeros((batch_size, max_length, 1), dtype=np.float32)
+    lengths = np.zeros((batch_size,), dtype=np.int64)
 
-    # Data
-    list_data_train, list_data_val = tu.load_HDF5(settings, test=False)
+    for pos, (x, target_tuple, _) in enumerate(data):
 
-    # Model specification
-    rnn = tu.get_model(settings, len(settings.training_features))
-    criterion = nn.CrossEntropyLoss()
-    optimizer = tu.get_optimizer(settings, rnn)
+        X[pos, : len(x), :] = x.astype(np.float32)
+        Y[pos, : len(x), 0] = target_tuple[1].astype(np.float32)
+        lengths[pos] = len(x)
 
-    # Prepare for GPU if required
-    if settings.use_cuda:
-        rnn.cuda()
-        criterion.cuda()
+    X = torch.from_numpy(X).to(DEVICE)
+    Y = torch.from_numpy(Y).to(DEVICE)
+    lengths = torch.from_numpy(lengths).to(DEVICE)
 
-    # Keep track of losses for plotting
-    loss_str = ""
-    d_monitor_train = {"loss": [], "AUC": [], "Acc": [], "epoch": [], "reg_MSE":[]}
-    d_monitor_val = {"loss": [], "AUC": [], "Acc": [], "epoch": [], "reg_MSE":[]}
-    if "bayesian" in settings.pytorch_model_name:
-        d_monitor_train["KL"] = []
-        d_monitor_val["KL"] = []
+    X_mask = (
+        torch.arange(max_length).view(1, -1).to(DEVICE) < lengths.view(-1, 1)
+    ).float()
 
-    lu.print_green("Starting training")
-
-    best_loss = float("inf")
-
-    settings.cyclic_phases
-
-    training_start_time = time()
-
-    for epoch in tqdm(range(settings.cyclic_phases[-1]), desc="Training", ncols=100):
-
-        desc = f"Epoch: {epoch} -- {loss_str}"
-
-        num_elem = len(list_data_train)
-        num_batches = num_elem // min(num_elem // 2, settings.batch_size)
-        list_batches = np.array_split(np.arange(num_elem), num_batches)
-        np.random.shuffle(list_batches)
-        for batch_idxs in tqdm(
-            list_batches,
-            desc=desc,
-            ncols=100,
-            bar_format="{desc} |{bar}| {n_fmt}/{total_fmt} {rate_fmt}{postfix}",
-        ):
-
-            # Sample a batch in packed sequence form
-            packed, _, target_tensor, idxs_rev_sort = tu.get_data_batch(
-                list_data_train, batch_idxs, settings
-            )
-            # Train step : forward backward pass
-            tu.train_step(
-                settings,
-                rnn,
-                packed,
-                target_tensor,
-                criterion,
-                optimizer,
-                len(batch_idxs),
-                len(list_batches),
-            )
-
-        for param_group in optimizer.param_groups:
-
-            param_group["lr"] = one_cycle_sched(
-                epoch, min_learning_rate, max_learning_rate, settings.cyclic_phases
-            )
-
-        if (epoch + 1) % settings.monitor_interval == 0:
-
-            # Get metrics (subsample training set to same size as validation set for speed)
-            d_losses_train = tu.get_evaluation_metrics(
-                settings, list_data_train, rnn, sample_size=len(list_data_val)
-            )
-            d_losses_val = tu.get_evaluation_metrics(
-                settings, list_data_val, rnn, sample_size=None
-            )
-
-            # Add current loss avg to list of losses
-            for key in d_losses_train.keys():
-                d_monitor_train[key].append(d_losses_train[key])
-                d_monitor_val[key].append(d_losses_val[key])
-            d_monitor_train["epoch"].append(epoch + 1)
-            d_monitor_val["epoch"].append(epoch + 1)
-
-            # Prepare loss_str to update progress bar
-            loss_str = tu.get_loss_string(d_losses_train, d_losses_val)
-
-            tu.plot_loss(d_monitor_train, d_monitor_val, epoch, settings)
-            if d_monitor_val["loss"][-1] < best_loss:
-                best_loss = d_monitor_val["loss"][-1]
-                torch.save(
-                    rnn.state_dict(),
-                    f"{settings.rnn_dir}/{settings.pytorch_model_name}.pt",
-                )
-
-    training_time = time() - training_start_time
-
-    lu.print_green("Finished training")
-
-    tu.save_training_results(settings, d_monitor_val, training_time)
-
-
-def save_normalizations(settings):
-    """Save normalization used for training
-
-    Saves a json file with the normalization used for each feature
-
-    Arguments:
-        settings (ExperimentSettings): controls experiment hyperparameters
-    """
-
-    dic_norm = {}
-    for i, f in enumerate(settings.training_features_to_normalize + ['peak']):
-        dic_norm[f] = {}
-        for j, w in enumerate(['min', 'mean', 'std']):
-            dic_norm[f][w] = float(settings.arr_norm[i, j])
-    fname = f"{Path(settings.rnn_dir)}/data_norm.json"
-    with open(fname, "w") as f:
-        json.dump(dic_norm, f, indent=4, sort_keys=True)
+    return X, Y, X_mask
 
 
 def train(settings):
@@ -253,16 +98,8 @@ def train(settings):
     # Data
     list_data_train, list_data_val = tu.load_HDF5(settings, test=False)
     # Model specification
-    rnn = tu.get_model(settings, len(settings.training_features))
-    if settings.__class__.__name__ == "PlasticcSettings":
-        criterion = nn.CrossEntropyLoss(
-            weight=torch.from_numpy(
-                np.array([1, 2, 1, 1, 1, 1, 1, 2, 1, 1,
-                          1, 1, 1, 1]).astype(np.float32)
-            )
-        )
-    else:
-        criterion = nn.CrossEntropyLoss()
+    rnn = VanillaRNN(len(settings.training_features))
+    criterion = nn.CrossEntropyLoss()
     optimizer = tu.get_optimizer(settings, rnn)
 
     # Prepare for GPU if required
@@ -272,86 +109,131 @@ def train(settings):
 
     # Keep track of losses for plotting
     loss_str = ""
-    d_monitor_train = {"loss": [], "AUC": [], "Acc": [], "epoch": [], "reg_MSE":[]}
-    d_monitor_val = {"loss": [], "AUC": [], "Acc": [], "epoch": [], "reg_MSE":[]}
-    if "bayesian" in settings.pytorch_model_name:
-        d_monitor_train["KL"] = []
-        d_monitor_val["KL"] = []
+    d_monitor_train = {"epoch": [], "reg_MSE": []}
+    d_monitor_val = {"epoch": [], "reg_MSE": []}
 
     lu.print_green("Starting training")
-
-    plateau_accuracy = tu.StopOnPlateau(reduce_lr_on_plateau=True)
 
     best_loss = float("inf")
 
     training_start_time = time()
 
-    for epoch in tqdm(range(settings.nb_epoch), desc="Training", ncols=100):
-
-        desc = f"Epoch: {epoch} -- {loss_str}"
+    for epoch in range(settings.nb_epoch):
 
         num_elem = len(list_data_train)
         num_batches = num_elem // min(num_elem // 2, settings.batch_size)
         list_batches = np.array_split(np.arange(num_elem), num_batches)
         np.random.shuffle(list_batches)
-        for batch_idxs in tqdm(
-            list_batches,
-            desc=desc,
-            ncols=100,
-            bar_format="{desc} |{bar}| {n_fmt}/{total_fmt} {rate_fmt}{postfix}",
-        ):
+
+        batch_losses = []
+
+        for batch_idxs in list_batches:
 
             # Sample a batch in packed sequence form
-            packed, _, target_tensor, idxs_rev_sort = tu.get_data_batch(
-                list_data_train, batch_idxs, settings
-            )
+            X, Y, X_mask = get_data_batch(list_data_train, batch_idxs, settings)
             # Train step : forward backward pass
-            tu.train_step(
-                settings,
-                rnn,
-                packed,
-                target_tensor,
-                criterion,
-                optimizer,
-                len(batch_idxs),
-                len(list_batches),
-            )
 
-        if (epoch + 1) % settings.monitor_interval == 0:
+            Y_pred = rnn(X, X_mask)
 
-            # Get metrics (subsample training set to same size as validation set for speed)
-            d_losses_train = tu.get_evaluation_metrics(
-                settings, list_data_train, rnn, sample_size=len(list_data_val)
-            )
-            d_losses_val = tu.get_evaluation_metrics(
-                settings, list_data_val, rnn, sample_size=None
-            )
+            # Loss
+            Y = Y.view(-1)
+            Y_pred = Y_pred.view(-1)
+            X_mask = X_mask.view(-1)
+            # Y, Y_pred, X_mask all are (B * L)
+            losspeak = ((Y_pred - Y).pow(2) * X_mask).sum() / X_mask.sum()
 
-            # end_condition = plateau_accuracy.step(
-            #     d_losses_val["Acc"], optimizer)
-            # if end_condition is True:
-            #     break
+            rnn.zero_grad()
+            losspeak.backward()
+            optimizer.step()
 
-            # Add current loss avg to list of losses
-            for key in d_losses_train.keys():
-                d_monitor_train[key].append(d_losses_train[key])
-                d_monitor_val[key].append(d_losses_val[key])
-            d_monitor_train["epoch"].append(epoch + 1)
-            d_monitor_val["epoch"].append(epoch + 1)
+            batch_losses.append(losspeak.item())
 
-            # Prepare loss_str to update progress bar
-            loss_str = tu.get_loss_string(d_losses_train, d_losses_val)
+        loss = np.mean(batch_losses)
+        d_monitor_train["reg_MSE"].append(loss)
 
-            tu.plot_loss(d_monitor_train, d_monitor_val, epoch, settings)
-            if d_monitor_val["loss"][-1] < best_loss:
-                best_loss = d_monitor_val["loss"][-1]
-                torch.save(
-                    rnn.state_dict(),
-                    f"{settings.rnn_dir}/{settings.pytorch_model_name}.pt",
-                )
+        # VALID
+        num_elem = len(list_data_val)
+        num_batches = num_elem // min(num_elem // 2, settings.batch_size)
+        list_batches = np.array_split(np.arange(num_elem), num_batches)
+        np.random.shuffle(list_batches)
 
-    lu.print_green("Finished training")
+        batch_losses = []
 
-    training_time = time() - training_start_time
+        for batch_idxs in list_batches:
 
-    tu.save_training_results(settings, d_monitor_val, training_time)
+            with torch.no_grad():
+
+                # Sample a batch in packed sequence form
+                X, Y, X_mask = get_data_batch(list_data_val, batch_idxs, settings)
+                # Train step : forward backward pass
+
+                Y_pred = rnn(X, X_mask)
+
+            # Loss
+            Y = Y.view(-1)
+            Y_pred = Y_pred.view(-1)
+            X_mask = X_mask.view(-1)
+            # Y, Y_pred, X_mask all are (B * L)
+            losspeak = ((Y_pred - Y).pow(2) * X_mask).sum() / X_mask.sum()
+
+            batch_losses.append(losspeak.item())
+
+        loss = np.mean(batch_losses)
+        d_monitor_val["reg_MSE"].append(loss)
+
+        print()
+        print("Train", d_monitor_train["reg_MSE"][-1])
+        print("Val", d_monitor_val["reg_MSE"][-1])
+
+    #     if (epoch + 1) % settings.monitor_interval == 0:
+
+    #         # Get metrics (subsample training set to same size as validation set for speed)
+    #         d_losses_train = tu.get_evaluation_metrics(
+    #             settings, list_data_train, rnn, sample_size=len(list_data_val)
+    #         )
+    #         d_losses_val = tu.get_evaluation_metrics(
+    #             settings, list_data_val, rnn, sample_size=None
+    #         )
+
+    #         # Add current loss avg to list of losses
+    #         for key in d_losses_train.keys():
+    #             d_monitor_train[key].append(d_losses_train[key])
+    #             d_monitor_val[key].append(d_losses_val[key])
+    #         d_monitor_train["epoch"].append(epoch + 1)
+    #         d_monitor_val["epoch"].append(epoch + 1)
+
+    #         # Prepare loss_str to update progress bar
+    #         loss_str = tu.get_loss_string(d_losses_train, d_losses_val)
+
+    #         tu.plot_loss(d_monitor_train, d_monitor_val, epoch, settings)
+    #         if d_monitor_val["loss"][-1] < best_loss:
+    #             best_loss = d_monitor_val["loss"][-1]
+    #             torch.save(
+    #                 rnn.state_dict(),
+    #                 f"{settings.rnn_dir}/{settings.pytorch_model_name}.pt",
+    #             )
+
+    # lu.print_green("Finished training")
+
+    # training_time = time() - training_start_time
+
+    # tu.save_training_results(settings, d_monitor_val, training_time)
+
+
+def save_normalizations(settings):
+    """Save normalization used for training
+
+    Saves a json file with the normalization used for each feature
+
+    Arguments:
+        settings (ExperimentSettings): controls experiment hyperparameters
+    """
+
+    dic_norm = {}
+    for i, f in enumerate(settings.training_features_to_normalize + ["peak"]):
+        dic_norm[f] = {}
+        for j, w in enumerate(["min", "mean", "std"]):
+            dic_norm[f][w] = float(settings.arr_norm[i, j])
+    fname = f"{Path(settings.rnn_dir)}/data_norm.json"
+    with open(fname, "w") as f:
+        json.dump(dic_norm, f, indent=4, sort_keys=True)

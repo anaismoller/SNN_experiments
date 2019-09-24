@@ -145,32 +145,12 @@ def fill_data_list(
         peak_mjd = arr_target[1][i]
         target_lc_peak = peak_mjd - arr_time
 
-        # normalize peak
-        if settings.peak_norm:
-            target_lc_peak = normalize_arr(target_lc_peak, settings, normalize_peak = True)
-
-        target = (target_class,target_lc_peak)
+        target = (target_class, target_lc_peak)
         lc = int(arr_SNID[i])
 
         # Keep an unnormalized copy of the data (for test and display)
         X_ori = X_all.copy()[:, settings.idx_features]
-
-        # check if normalization converges
-        # using clipping in case of min<model_min
-        X_clip = X_all.copy()
-        X_clip = np.clip(
-            X_clip[:, settings.idx_features_to_normalize], settings.arr_norm[:-1, 0], np.inf)
-        X_all[:, settings.idx_features_to_normalize] = X_clip
-
-        X_tmp = unnormalize_arr(normalize_arr(
-            X_all.copy(), settings), settings)
-        assert np.all(
-            np.all(np.isclose(np.ravel(X_all), np.ravel(X_tmp), atol=1e-1)))
-        # Normalize features that need to be normalized
-        X_normed = X_all.copy()
-        X_normed_tmp = normalize_arr(X_normed, settings)
-        # Select features as specified by the settings
-        X_normed = X_normed_tmp[:, settings.idx_features]
+        X_normed = X_all.copy()[:, settings.idx_features]
 
         if test is True:
             list_data.append((X_normed, target, lc, X_all, X_ori))
@@ -208,30 +188,27 @@ def load_HDF5(settings, test=False):
         dataset_split_key = f"dataset_{config_name}"
         target_key = f"target_{settings.nb_classes}classes"
 
-        if any([settings.train_plasticc, settings.predict_plasticc]):
-            target_key = "target"
-            dataset_split_key = "dataset"
+        n_samples = hf["data"].shape[0]
+        subset_n_samples = int(n_samples * settings.data_fraction)
 
-        if test:
-            # ridiculous failsafe in case we have different classes in dataset/model
-            # we will always have 2 classes
-            try:
-                idxs_test = np.where(hf[dataset_split_key][:] == 2)[0]
-            except Exception:
-                idxs_test = np.where(
-                    hf['dataset_photometry_2classes'][:] != 100)[0]
-        else:
-            idxs_train = np.where(hf[dataset_split_key][:] == 0)[0]
-            idxs_val = np.where(hf[dataset_split_key][:] == 1)[0]
-            idxs_test = np.where(hf[dataset_split_key][:] == 2)[0]
+        idxs = np.random.permutation(n_samples)[:subset_n_samples]
+        idxs = idxs[:]
+        idxs_train = idxs[: subset_n_samples // 2]
+        idxs_val = idxs[subset_n_samples // 2 :]
+        idxs_test = idxs[subset_n_samples // 2 :]
 
-            # Shuffle for good measure
-            np.random.shuffle(idxs_train)
-            np.random.shuffle(idxs_val)
-            np.random.shuffle(idxs_test)
 
-            idxs_train = idxs_train[: int(
-                settings.data_fraction * len(idxs_train))]
+        # idxs_train = np.where(hf[dataset_split_key][:] == 0)[0]
+        # idxs_val = np.where(hf[dataset_split_key][:] == 1)[0]
+        # idxs_test = np.where(hf[dataset_split_key][:] == 2)[0]
+
+        # # Shuffle for good measure
+        # np.random.shuffle(idxs_train)
+        # np.random.shuffle(idxs_val)
+        # np.random.shuffle(idxs_test)
+
+        # idxs_train = idxs_train[: int(
+        #     settings.data_fraction * len(idxs_train))]
 
         n_features = hf["data"].attrs["n_features"]
 
@@ -239,48 +216,28 @@ def load_HDF5(settings, test=False):
         lu.print_green("Features used", training_features)
 
         arr_data = hf["data"][:]
-        if test:
-            # failsafe in case we have different classes in dataset/model
-            # we will always have 2 classes
-            try:
-                arr_target = hf[target_key][:],hf["PEAKMJDNORM"][:]
-            except Exception:
-                arr_target = hf['target_2classes'][:],hf["PEAKMJDNORM"][:]
-        else:
-            arr_target = hf[target_key][:],hf["PEAKMJDNORM"][:]
+        arr_target = hf['target_2classes'][:], hf["PEAKMJDNORM"][:]
         arr_SNID = hf["SNID"][:]
 
-        if test is True:
-            return fill_data_list(
-                idxs_test,
-                arr_data,
-                arr_target,
-                arr_SNID,
-                settings,
-                n_features,
-                "Loading Test Set",
-                test,
-            )
-        else:
+        list_data_train = fill_data_list(
+            idxs_train,
+            arr_data,
+            arr_target,
+            arr_SNID,
+            settings,
+            n_features,
+            "Loading Training Set",
+        )
+        list_data_val = fill_data_list(
+            idxs_val,
+            arr_data,
+            arr_target,
+            arr_SNID,
+            settings,
+            n_features,
+            "Loading Validation Set",
+        )
 
-            list_data_train = fill_data_list(
-                idxs_train,
-                arr_data,
-                arr_target,
-                arr_SNID,
-                settings,
-                n_features,
-                "Loading Training Set",
-            )
-            list_data_val = fill_data_list(
-                idxs_val,
-                arr_data,
-                arr_target,
-                arr_SNID,
-                settings,
-                n_features,
-                "Loading Validation Set",
-            )
         return list_data_train, list_data_val
 
 
@@ -352,64 +309,64 @@ def get_data_batch(list_data, idxs, settings, max_lengths=None, OOD=None):
     for pos, i in enumerate(idxs):
         X, target, *_ = list_data[i]
         # X is (L, D)
-        if OOD is not None:
-            # Make a copy to be sure we do not alter the original data
-            X = X.copy()
-        if OOD == "reverse":
-            # For OOD test, reverse the sequence
-            X = np.ascontiguousarray(X[::-1])
-        elif OOD == "shuffle":
-            # For OOD test, shuffle X
-            p = np.random.permutation(X.shape[0])
-            X = X[p]
-        elif OOD == "sin":
-            # For OOD test, set sine values to fluxes
-            arr_flux = X[:, settings.idx_flux]
-            arr_fluxerr = X[:, settings.idx_fluxerr]
+        # if OOD is not None:
+        #     # Make a copy to be sure we do not alter the original data
+        #     X = X.copy()
+        # if OOD == "reverse":
+        #     # For OOD test, reverse the sequence
+        #     X = np.ascontiguousarray(X[::-1])
+        # elif OOD == "shuffle":
+        #     # For OOD test, shuffle X
+        #     p = np.random.permutation(X.shape[0])
+        #     X = X[p]
+        # elif OOD == "sin":
+        #     # For OOD test, set sine values to fluxes
+        #     arr_flux = X[:, settings.idx_flux]
+        #     arr_fluxerr = X[:, settings.idx_fluxerr]
 
-            X_unnorm = unnormalize_arr(X.copy(), settings)
-            arr_delta_time = X_unnorm[:, settings.idx_delta_time]
-            arr_MJD = np.cumsum(arr_delta_time, axis=0)
+        #     X_unnorm = unnormalize_arr(X.copy(), settings)
+        #     arr_delta_time = X_unnorm[:, settings.idx_delta_time]
+        #     arr_MJD = np.cumsum(arr_delta_time, axis=0)
 
-            # Sine oscillations with 30 day period
-            X[:, settings.idx_flux] = np.sin(arr_MJD * 2 * np.pi / 30) * np.max(
-                arr_flux, axis=0, keepdims=True
-            )
-            X[:, settings.idx_fluxerr] = np.random.uniform(
-                arr_fluxerr.min(), arr_fluxerr.max(), size=arr_fluxerr.shape
-            )
-        elif OOD == "random":
-            # For OOD test, set random fluxes and errors
-            arr_flux = X[:, settings.idx_flux]
-            arr_fluxerr = X[:, settings.idx_fluxerr]
+        #     # Sine oscillations with 30 day period
+        #     X[:, settings.idx_flux] = np.sin(arr_MJD * 2 * np.pi / 30) * np.max(
+        #         arr_flux, axis=0, keepdims=True
+        #     )
+        #     X[:, settings.idx_fluxerr] = np.random.uniform(
+        #         arr_fluxerr.min(), arr_fluxerr.max(), size=arr_fluxerr.shape
+        #     )
+        # elif OOD == "random":
+        #     # For OOD test, set random fluxes and errors
+        #     arr_flux = X[:, settings.idx_flux]
+        #     arr_fluxerr = X[:, settings.idx_fluxerr]
 
-            X[:, settings.idx_flux] = np.random.uniform(
-                arr_flux.min(), arr_flux.max(), size=arr_flux.shape
-            )
-            X[:, settings.idx_fluxerr] = np.random.uniform(
-                arr_fluxerr.min(), arr_fluxerr.max(), size=arr_fluxerr.shape
-            )
+        #     X[:, settings.idx_flux] = np.random.uniform(
+        #         arr_flux.min(), arr_flux.max(), size=arr_flux.shape
+        #     )
+        #     X[:, settings.idx_fluxerr] = np.random.uniform(
+        #         arr_fluxerr.min(), arr_fluxerr.max(), size=arr_fluxerr.shape
+        #     )
 
-        if max_lengths is not None:
-            assert settings.random_length is False
-            assert settings.random_redshift is False
-            X = X[: max_lengths[pos]]
-            target = (target[0],target[1][:max_lengths[pos]])
-        if settings.random_length:
-            # random length of lc
-            random_length = np.random.randint(1, X.shape[0] + 1)
-            X = X[:random_length]
-            target = (target[0],target[1][:random_length])
-        if settings.random_start:
-            # random start of light-curve to avoid biasing the peak prediction
-            # at least 3 epochs left
-            if X.shape[0] > 3:
-                random_start = np.random.randint(0, X.shape[0]-3)
-                X = X[random_start:]
-                target = (target[0],target[1][random_start:])
-        if settings.redshift == "zspe" and settings.random_redshift:
-            if np.random.binomial(1, 0.5) == 0:
-                X[:, settings.idx_specz] = -1
+        # if max_lengths is not None:
+        #     assert settings.random_length is False
+        #     assert settings.random_redshift is False
+        #     X = X[: max_lengths[pos]]
+        #     target = (target[0],target[1][:max_lengths[pos]])
+        # if settings.random_length:
+        #     # random length of lc
+        #     random_length = np.random.randint(1, X.shape[0] + 1)
+        #     X = X[:random_length]
+        #     target = (target[0],target[1][:random_length])
+        # if settings.random_start:
+        #     # random start of light-curve to avoid biasing the peak prediction
+        #     # at least 3 epochs left
+        #     if X.shape[0] > 3:
+        #         random_start = np.random.randint(0, X.shape[0]-3)
+        #         X = X[random_start:]
+        #         target = (target[0],target[1][random_start:])
+        # if settings.redshift == "zspe" and settings.random_redshift:
+        #     if np.random.binomial(1, 0.5) == 0:
+        #         X[:, settings.idx_specz] = -1
         input_dim = X.shape[1]
         list_len.append(X.shape[0])
         list_batch.append((X, target))

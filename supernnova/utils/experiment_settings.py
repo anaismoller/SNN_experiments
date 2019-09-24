@@ -177,13 +177,15 @@ class ExperimentSettings:
         """Utility to define the features used to train NN=based models
         """
 
-        self.training_features_to_normalize = [
-            f"FLUXCAL_{f}" for f in self.list_filters
-        ]
-        self.training_features_to_normalize += [
-            f"FLUXCALERR_{f}" for f in self.list_filters
-        ]
-        self.training_features_to_normalize += ["delta_time"]
+        # self.training_features_to_normalize = [
+        #     f"FLUXCAL_{f}" for f in self.list_filters
+        # ]
+        # self.training_features_to_normalize += [
+        #     f"FLUXCALERR_{f}" for f in self.list_filters
+        # ]
+        # self.training_features_to_normalize += ["delta_time"]
+
+        self.training_features_to_normalize = []
 
         if not self.data:
             # If the database has been created, add the list of all features
@@ -205,9 +207,21 @@ class ExperimentSettings:
                         f for f in self.all_features if "HOSTGAL_SPECZ" in f
                     ]
 
-                self.training_features = (
-                    self.non_redshift_features + self.redshift_features
-                )
+                self.training_features = [
+                    "FLUXCAL_g",
+                    "FLUXCAL_i",
+                    "FLUXCAL_r",
+                    "FLUXCAL_z",
+                    "FLUXCALERR_g",
+                    "FLUXCALERR_i",
+                    "FLUXCALERR_r",
+                    "FLUXCALERR_z",
+                    "delta_time",
+                ]
+
+                # self.training_features = (
+                #     self.non_redshift_features + self.redshift_features
+                # )
 
     def set_database_file_names(self):
         """Create a unique database name based on the dataset required
@@ -262,7 +276,7 @@ class ExperimentSettings:
 
             with h5py.File(self.hdf5_file_name, "r") as hf:
 
-                for f in self.training_features_to_normalize + ['target_lc_peak']:
+                for f in self.training_features_to_normalize + ["target_lc_peak"]:
 
                     if self.norm == "perfilter":
 
@@ -290,7 +304,6 @@ class ExperimentSettings:
 
 
 class PlasticcSettings(object):
-
     def __init__(self, cli_args):
 
         # Transfer attributes

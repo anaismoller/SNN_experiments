@@ -1,8 +1,8 @@
 import torch
 import torch.nn.functional as F
 
-class VanillaRNN(torch.nn.Module):
 
+class VanillaRNN(torch.nn.Module):
     def __init__(self, input_size, settings):
         super(VanillaRNN, self).__init__()
 
@@ -28,15 +28,15 @@ class VanillaRNN(torch.nn.Module):
             input_size,
             self.hidden_size,
             num_layers=self.num_layers,
-            dropout=self.dropout,
+            dropout=0,  # self.dropout,
             bidirectional=self.bidirectional,
         )
-        self.output_dropout_layer = torch.nn.Dropout(self.dropout)
-        self.output_class_layer = torch.nn.Linear(
-            last_input_size, self.output_size)
+        # self.output_dropout_layer = torch.nn.Dropout(self.dropout)
+        self.output_class_layer = torch.nn.Linear(last_input_size, self.output_size)
         # regression does not use mean vs standard outputs
         self.output_peak_layer = torch.nn.Linear(
-            self.hidden_size * bidirectional_factor, 1)
+            self.hidden_size * bidirectional_factor, 1
+        )
 
     def forward(self, x, mean_field_inference=False):
         # Reminder
@@ -82,8 +82,7 @@ class VanillaRNN(torch.nn.Module):
                 # x_class is (seq_len, batch, hidden size * num_directions)
 
                 # take mean over seq_len
-                x_class = x_class.sum(
-                    0) / lens.unsqueeze(-1).float().to(x_class.device)
+                x_class = x_class.sum(0) / lens.unsqueeze(-1).float().to(x_class.device)
                 # x_class is (batch, hidden_size * num_directions)
             else:
                 x_class = x.mean(0)
@@ -95,7 +94,7 @@ class VanillaRNN(torch.nn.Module):
             x_unpacked, lens = torch.nn.utils.rnn.pad_packed_sequence(x)
             outpeak = self.output_peak_layer(x_unpacked)
             # now I need to mask padded values
-            mask = (torch.arange(lens.max().item()).view(1, -1))
+            mask = torch.arange(lens.max().item()).view(1, -1)
             lens = lens.view(-1, 1).float()
             # lens == (B, 1)
             # torch.arange == (1, max_len)
@@ -108,7 +107,7 @@ class VanillaRNN(torch.nn.Module):
             maskpeak = None
 
         # apply dropout
-        x_class = self.output_dropout_layer(x_class)
+        # x_class = self.output_dropout_layer(x_class)
         # Final projection layer
         outclass = self.output_class_layer(x_class)
 
