@@ -74,11 +74,12 @@ def data_loader(settings):
         config_name = f"{settings.source_data}_{settings.nb_classes}classes"
 
         n_samples = hf["data"].shape[0]
+        subset_n_samples = int(n_samples*settings.data_fraction)
 
-        idxs = np.random.permutation(n_samples)
+        idxs = np.random.permutation(n_samples)[:subset_n_samples]
         idxs = idxs[:]
-        idxs_train = idxs[: n_samples // 2]
-        idxs_val = idxs[n_samples // 2 :]
+        idxs_train = idxs[: subset_n_samples // 2]
+        idxs_val = idxs[subset_n_samples // 2 :]
 
         n_features = hf["data"].attrs["n_features"]
 
