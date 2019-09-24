@@ -518,8 +518,8 @@ def train_step(
     else: # TO DO, this I think can be deprecated
         lossclass = criterion_class(outclass.squeeze(), target_class)
 
-    # loss = lossclass + losspeak
-    loss = losspeak
+    loss = lossclass + losspeak
+    # loss = losspeak
 
     # Backward pass
     loss.backward()
@@ -561,7 +561,7 @@ def plot_loss(d_train, d_val, epoch, settings):
         settings (ExperimentSettings): custom class to hold hyperparameters
     """
 
-    for key in d_train.keys():
+    for key in [k for k in d_train.keys() if k!='epoch']:
 
         plt.figure()
         plt.plot(d_train["epoch"], d_train[key],
@@ -685,10 +685,9 @@ def get_evaluation_metrics(settings, list_data, model, sample_size=None):
     log_loss = metrics.log_loss(targets_class_2D, preds_class)
 
     # regression metrics
-    reg_loss = (np.power(preds_peak-targets_peak,2)*targets_peak_mask).sum()/targets_peak_mask.sum()
-    MSE = np.power((preds_peak-targets_peak)*targets_peak_mask,2).sum()/targets_peak_mask.sum()
+    MSE = (np.power((preds_peak-targets_peak),2)*targets_peak_mask).sum()/targets_peak_mask.sum()
 
-    d_losses = {"AUC": auc, "Acc": acc, "loss": log_loss, "reg_MSE": MSE,"reg_loss": reg_loss}
+    d_losses = {"AUC": auc, "Acc": acc, "loss": log_loss, "reg_MSE": MSE}
 
     if len(list_kl) != 0:
         d_losses["KL"] = np.mean(list_kl)

@@ -50,16 +50,19 @@ def get_predictions(settings, dict_rnn, X, target, OOD=None):
                 ]
                 out = torch.cat(list_out, dim=0)
                 # Apply softmax to obtain a proba
-                pred_proba = nn.functional.softmax(out, dim=-1).data.cpu().numpy()
+                pred_proba = nn.functional.softmax(
+                    out, dim=-1).data.cpu().numpy()
             else:
                 outclass, outpeak, maskpeak = rnn(X_slice.expand(new_size))
                 # Apply softmax to obtain a proba
-                pred_proba = nn.functional.softmax(outclass, dim=-1).data.cpu().numpy()
+                pred_proba = nn.functional.softmax(
+                    outclass, dim=-1).data.cpu().numpy()
 
             # Add to buffer list
             d_pred[model_type]["prob"].append(pred_proba)
             # only last peak
-            d_pred[model_type]["peak"].append(float(outpeak.data.cpu().numpy()[-1]))
+            d_pred[model_type]["peak"].append(
+                float(outpeak.data.cpu().numpy()[-1]))
 
     # Stack
     for key in dict_rnn.keys():
@@ -108,7 +111,7 @@ def plot_predictions(
     else:
         ax.set_title(SNtype + f" (ID: {SNID}, redshift: {redshift:.3g})")
         # Add PEAKMJD
-        if OOD is None and not settings.data_testing and arr_time.min()<peak_MJD and peak_MJD>arr_time.max():
+        if OOD is None and not settings.data_testing and arr_time.min() < peak_MJD and peak_MJD > arr_time.max():
             ax.plot([peak_MJD, peak_MJD], ylim, "k--", label="Peak MJD")
 
     # Plot the classifications
@@ -147,32 +150,31 @@ def plot_predictions(
                 alpha=0.2,
             )
     # ax.set_xlabel("Time (MJD)")
-    ax.set_ylabel("classification probability")
-    if OOD is None and not settings.data_testing and arr_time.min()<peak_MJD and peak_MJD>arr_time.max():
+    ax.set_ylabel("class probability")
+    if OOD is None and not settings.data_testing and arr_time.min() < peak_MJD and peak_MJD > arr_time.max():
         ax.plot([peak_MJD, peak_MJD], [0, 1], "k--", label="Peak MJD")
     ax.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.0)
 
     # plot peak MJD preds
     ax = plt.subplot(gs[2])
-    #truth
-    ax.plot(
-                arr_time,
-                target[1],
-                color='grey',
-                linestyle='dotted',
-            )
+    # truth
+    if OOD is None:
+        ax.plot(
+            arr_time,
+            target[1],
+            color='grey',
+            linestyle='dotted',
+        )
     # predicted
     ax.plot(
-                arr_time,
-                d_pred[key]["peak"],
-                color=color,
-                linestyle=linestyle,
-            )
-    
-
+        arr_time,
+        d_pred[key]["peak"],
+        color=color,
+        linestyle=linestyle,
+    )
     ax.set_xlabel("Time (MJD)")
     ax.set_ylabel("peak prediction")
-    
+
     prefix = f"OOD_{OOD}_" if OOD is not None else ""
     if len(settings.model_files) > 1:
         fig_path = f"{settings.figures_dir}/{prefix}multi_model_early_prediction"
@@ -195,7 +197,7 @@ def plot_predictions(
     plt.close()
 
 
-def make_early_prediction(settings, nb_lcs=1, do_gifs=False):
+def make_early_prediction(settings, nb_lcs=1, do_gifs=False, plot_ODD=True):
     """Load model corresponding to settings
     or (if specified) load a list of models.
 
@@ -224,16 +226,20 @@ def make_early_prediction(settings, nb_lcs=1, do_gifs=False):
         settings.model_files = [f"{settings.rnn_dir}/{settings.pytorch_model_name}.pt"]
     else:
         # check if the model files are there
-        tmp_not_found = [m for m in settings.model_files if not os.path.exists(m)]
+        tmp_not_found = [
+            m for m in settings.model_files if not os.path.exists(m)]
         if len(tmp_not_found) > 0:
             print(lu.str_to_redstr(f"Files not found {tmp_not_found}"))
-            tmp_model_files = [m for m in settings.model_files if os.path.exists(m)]
+            tmp_model_files = [
+                m for m in settings.model_files if os.path.exists(m)]
             settings.model_files = tmp_model_files
 
     # Check that the settings match the model file
     base_files = [Path(f).name for f in settings.model_files]
-    classes = [int(re.search(r"(?<=CLF\_)\d+(?=\_)", f).group()) for f in base_files]
-    redshifts = [re.search(r"(?<=R\_)[A-Za-z]+(?=\_)", f).group() for f in base_files]
+    classes = [int(re.search(r"(?<=CLF\_)\d+(?=\_)", f).group())
+               for f in base_files]
+    redshifts = [re.search(r"(?<=R\_)[A-Za-z]+(?=\_)", f).group()
+                 for f in base_files]
 
     assert len(set(classes)) == 1, lu.str_to_redstr(
         "Can't provide model files with different number of classes"
@@ -258,7 +264,8 @@ def make_early_prediction(settings, nb_lcs=1, do_gifs=False):
         if "bayesian" in model_file:
             settings.model = "bayesian"
         rnn = tu.get_model(settings, len(settings.training_features))
-        rnn_state = torch.load(model_file, map_location=lambda storage, loc: storage)
+        rnn_state = torch.load(
+            model_file, map_location=lambda storage, loc: storage)
         rnn.load_state_dict(rnn_state)
         rnn.to(settings.device)
         rnn.eval()
@@ -274,13 +281,15 @@ def make_early_prediction(settings, nb_lcs=1, do_gifs=False):
 
     # Loop over data to plot prediction
     # randomly select lcs to plot
-    list_entries = np.random.randint(0,high=len(list_data_test),size=nb_lcs)
+    list_entries = np.random.randint(0, high=len(list_data_test), size=nb_lcs)
     subset_to_plot = [list_data_test[i] for i in list_entries]
     for X, target, SNID, _, X_ori in tqdm(subset_to_plot, ncols=100):
-        
+
         try:
-            redshift = SNinfo_df[SNinfo_df["SNID"] == SNID]["SIM_REDSHIFT_CMB"].values[0]
-            peak_MJD = SNinfo_df[SNinfo_df["SNID"] == SNID]["PEAKMJDNORM"].values[0]
+            redshift = SNinfo_df[SNinfo_df["SNID"] ==
+                                 SNID]["SIM_REDSHIFT_CMB"].values[0]
+            peak_MJD = SNinfo_df[SNinfo_df["SNID"]
+                                 == SNID]["PEAKMJDNORM"].values[0]
         except Exception:
             redshift = 0.0
             peak_MJD = 0.0
@@ -290,7 +299,9 @@ def make_early_prediction(settings, nb_lcs=1, do_gifs=False):
             flt: {"FLUXCAL": [], "FLUXCALERR": [], "MJD": []}
             for flt in settings.list_filters
         }
-        for OOD in [None] + du.OOD_TYPES:
+
+        event_type_to_plot = [None] + du.OOD_TYPES if plot_ODD else [None]
+        for OOD in event_type_to_plot:
             with torch.no_grad():
                 d_pred, X_normed = get_predictions(
                     settings, dict_rnn, X, target, OOD=OOD
@@ -298,18 +309,22 @@ def make_early_prediction(settings, nb_lcs=1, do_gifs=False):
             # X here has been normalized. We unnormalize X
             X_unnormed = tu.unnormalize_arr(X_normed, settings)
             # need to do similarly for peak both prediction and target
-            for key in  d_pred.keys():
-                d_pred[key]['peak'] = tu.unnormalize_arr(np.array(d_pred[key]['peak']), settings,normalize_peak = True)
-                target = target[0], tu.unnormalize_arr(target[1], settings,normalize_peak = True)
+            for key in d_pred.keys():
+                d_pred[key]['peak'] = tu.unnormalize_arr(
+                    np.array(d_pred[key]['peak']), settings, normalize_peak=True)
+                target = target[0], tu.unnormalize_arr(
+                    target[1], settings, normalize_peak=True)
 
             # Check we do recover X_ori when OOD is None
             if OOD is None:
-                #check if normalization converges
+                # check if normalization converges
                 # using clipping in case of min<model_min
                 X_clip = X_ori.copy()
-                X_clip = np.clip(X_clip[:,settings.idx_features_to_normalize], settings.arr_norm[:-1, 0], np.inf)
-                X_ori[:,settings.idx_features_to_normalize] = X_clip
-                assert np.all(np.all(np.isclose(np.ravel(X_ori), np.ravel(X_unnormed), atol=1e-1)))
+                X_clip = np.clip(
+                    X_clip[:, settings.idx_features_to_normalize], settings.arr_norm[:-1, 0], np.inf)
+                X_ori[:, settings.idx_features_to_normalize] = X_clip
+                assert np.all(
+                    np.all(np.isclose(np.ravel(X_ori), np.ravel(X_unnormed), atol=1e-1)))
 
             # TODO: IMPROVE
             df_temp = pd.DataFrame(data=X_unnormed, columns=features)
@@ -356,13 +371,15 @@ def plot_gif(settings, df_plot, SNID, redshift, peak_MJD, target, arr_time, d_pr
     """
     import imageio
 
-    def plot_image_for_gif(fig,gs, df_plot,d_pred,time,SNtype):
+    def plot_image_for_gif(fig, gs, df_plot, d_pred, time, SNtype):
 
         # Plot the lightcurve
         ax = plt.subplot(gs[0])
         # Used to keep the limits constant
-        flux_max = max(df_plot[[k for k in df_plot.keys() if 'FLUXCAL_' in k]].max())
-        flux_min = min(df_plot[[k for k in df_plot.keys() if 'FLUXCAL_' in k]].min())
+        flux_max = max(
+            df_plot[[k for k in df_plot.keys() if 'FLUXCAL_' in k]].max())
+        flux_min = min(
+            df_plot[[k for k in df_plot.keys() if 'FLUXCAL_' in k]].min())
         ax.set_ylim(flux_min - 5, flux_max + 5)
         ax.set_xlim(-.5, max(df_plot['time']) + 2)
 
@@ -433,7 +450,7 @@ def plot_gif(settings, df_plot, SNID, redshift, peak_MJD, target, arr_time, d_pr
 
         return image
 
-    kwargs_write = {'fps':1.0, 'quantizer':'nq'}
+    kwargs_write = {'fps': 1.0, 'quantizer': 'nq'}
     fig = plt.figure()
     gs = gridspec.GridSpec(2, 1)
     SNtype = du.sntype_decoded(target, settings)
@@ -445,5 +462,7 @@ def plot_gif(settings, df_plot, SNID, redshift, peak_MJD, target, arr_time, d_pr
         f"{settings.pytorch_model_name}_class_pred_with_lc_{SNID}.gif"
     )
     Path(fig_path).mkdir(parents=True, exist_ok=True)
-    arr_images = [plot_image_for_gif(fig, gs,df_plot,d_pred,time,SNtype) for time in arr_time]
-    arr_images[0].save(str(Path(fig_path) / fig_name), save_all=True, append_images=arr_images, loop=5, duration=200)
+    arr_images = [plot_image_for_gif(
+        fig, gs, df_plot, d_pred, time, SNtype) for time in arr_time]
+    arr_images[0].save(str(Path(fig_path) / fig_name), save_all=True,
+                       append_images=arr_images, loop=5, duration=200)
