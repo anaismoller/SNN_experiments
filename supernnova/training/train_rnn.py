@@ -25,7 +25,7 @@ class VanillaRNN(torch.nn.Module):
             num_layers=2,
             dropout=0,
             bidirectional=True,
-            batch_first=True,
+            batch_first=False,
         )
         # self.output_class_layer = torch.nn.Linear()
         # # regression does not use mean vs standard outputs
@@ -40,18 +40,51 @@ class VanillaRNN(torch.nn.Module):
 
         # Pack
         x_packed = torch.nn.utils.rnn.pack_padded_sequence(
-            x, lengths, batch_first=True, enforce_sorted=False
+            x, lengths, batch_first=False, enforce_sorted=True
         )
 
         x_packed, hidden = self.rnn_layer(x_packed)
 
         # unpack
-        x_padded, _ = torch.nn.utils.rnn.pad_packed_sequence(x_packed, batch_first=True)
+        x_padded, _ = torch.nn.utils.rnn.pad_packed_sequence(
+            x_packed, batch_first=False
+        )
         # x_padded is (B, L, D)
 
         x_pred = self.output_peak_layer(x_padded)
 
         return x_pred
+
+
+# def get_data_batch(list_data, batch_idxs, settings):
+
+#     start, end = batch_idxs[0], batch_idxs[-1] + 1
+
+#     data = list_data[start:end]
+
+#     batch_size = len(batch_idxs)
+#     input_size = data[0][0].shape[-1]
+#     max_length = max([len(x[0]) for x in data])
+
+#     X = np.zeros((batch_size, max_length, input_size), dtype=np.float32)
+#     Y = np.zeros((batch_size, max_length, 1), dtype=np.float32)
+#     lengths = np.zeros((batch_size,), dtype=np.int64)
+
+#     for pos, (x, target_tuple, _) in enumerate(data):
+
+#         X[pos, : len(x), :] = x.astype(np.float32)
+#         Y[pos, : len(x), 0] = target_tuple[1].astype(np.float32)
+#         lengths[pos] = len(x)
+
+#     X = torch.from_numpy(X).to(DEVICE)
+#     Y = torch.from_numpy(Y).to(DEVICE)
+#     lengths = torch.from_numpy(lengths).to(DEVICE)
+
+#     X_mask = (
+#         torch.arange(max_length).view(1, -1).to(DEVICE) < lengths.view(-1, 1)
+#     ).float()
+
+#     return X, Y, X_mask
 
 
 def get_data_batch(list_data, batch_idxs, settings):
@@ -62,16 +95,21 @@ def get_data_batch(list_data, batch_idxs, settings):
 
     batch_size = len(batch_idxs)
     input_size = data[0][0].shape[-1]
-    max_length = max([len(x[0]) for x in data])
+    list_lengths = [len(x[0]) for x in data]
 
-    X = np.zeros((batch_size, max_length, input_size), dtype=np.float32)
-    Y = np.zeros((batch_size, max_length, 1), dtype=np.float32)
+    max_length = max(list_lengths)
+    idxs_sort = np.argsort(list_lengths)[::-1]  # descending length
+
+    X = np.zeros((max_length, batch_size, input_size), dtype=np.float32)
+    Y = np.zeros((max_length, batch_size, 1), dtype=np.float32)
     lengths = np.zeros((batch_size,), dtype=np.int64)
 
-    for pos, (x, target_tuple, _) in enumerate(data):
+    for pos, idx in enumerate(idxs_sort):
 
-        X[pos, : len(x), :] = x.astype(np.float32)
-        Y[pos, : len(x), 0] = target_tuple[1].astype(np.float32)
+        x, target_tuple, _ = data[idx]
+
+        X[: len(x), pos, :] = x.astype(np.float32)
+        Y[: len(x), pos, 0] = target_tuple[1].astype(np.float32)
         lengths[pos] = len(x)
 
     X = torch.from_numpy(X).to(DEVICE)
@@ -83,6 +121,54 @@ def get_data_batch(list_data, batch_idxs, settings):
     ).float()
 
     return X, Y, X_mask
+
+
+def get_evaluation_metrics(settings, list_data, model, sample_size=None):
+    """Compute evaluation metrics on a list of data points
+
+    Args:
+        settings (ExperimentSettings): custom class to hold hyperparameters
+        list_data (list): contains data to evaluate
+        model (torch.nn Model): pytorch model
+        sample_size (int): subset of the data to use for validation. Default: ``None``
+
+    Returns:
+        d_losses (dict) maps metrics to their computed value
+    """
+
+    # Validate
+    list_target_peak = []
+    list_pred_peak = []
+    list_mask = []
+
+    num_elem = len(list_data)
+    num_batches = num_elem // min(num_elem // 2, settings.batch_size)
+    list_batches = np.array_split(np.arange(num_elem), num_batches)
+
+    # If required, pick a subset of list batches at random
+    if sample_size:
+        batch_idxs = np.random.permutation(len(list_batches))
+        num_batches = sample_size // min(sample_size // 2, settings.batch_size)
+        batch_idxs = batch_idxs[:num_batches]
+        list_batches = [list_batches[batch_idx] for batch_idx in batch_idxs]
+
+    for batch_idxs in list_batches:
+        with torch.no_grad():
+            X, Y, X_mask = get_data_batch(list_data, batch_idxs, settings)
+            Y_pred = model(X, X_mask)
+
+            list_target_peak.append(Y.view(-1).cpu().numpy())
+            list_pred_peak.append(Y_pred.view(-1).cpu().numpy())
+            list_mask.append(X_mask.view(-1).cpu().numpy())
+
+    preds_peak = np.concatenate(list_pred_peak)
+    targets_peak = np.concatenate(list_target_peak)
+    mask = np.concatenate(list_mask)
+
+    # regression metrics
+    MSE = (np.power((preds_peak - targets_peak), 2) * mask).sum() / mask.sum()
+
+    return MSE
 
 
 def train(settings):
@@ -185,39 +271,14 @@ def train(settings):
         print("Train", d_monitor_train["reg_MSE"][-1])
         print("Val", d_monitor_val["reg_MSE"][-1])
 
-    #     if (epoch + 1) % settings.monitor_interval == 0:
+        # Get metrics (subsample training set to same size as validation set for speed)
+        mse_train = get_evaluation_metrics(
+            settings, list_data_train, rnn, sample_size=len(list_data_val)
+        )
+        mse_val = get_evaluation_metrics(settings, list_data_val, rnn, sample_size=None)
 
-    #         # Get metrics (subsample training set to same size as validation set for speed)
-    #         d_losses_train = tu.get_evaluation_metrics(
-    #             settings, list_data_train, rnn, sample_size=len(list_data_val)
-    #         )
-    #         d_losses_val = tu.get_evaluation_metrics(
-    #             settings, list_data_val, rnn, sample_size=None
-    #         )
-
-    #         # Add current loss avg to list of losses
-    #         for key in d_losses_train.keys():
-    #             d_monitor_train[key].append(d_losses_train[key])
-    #             d_monitor_val[key].append(d_losses_val[key])
-    #         d_monitor_train["epoch"].append(epoch + 1)
-    #         d_monitor_val["epoch"].append(epoch + 1)
-
-    #         # Prepare loss_str to update progress bar
-    #         loss_str = tu.get_loss_string(d_losses_train, d_losses_val)
-
-    #         tu.plot_loss(d_monitor_train, d_monitor_val, epoch, settings)
-    #         if d_monitor_val["loss"][-1] < best_loss:
-    #             best_loss = d_monitor_val["loss"][-1]
-    #             torch.save(
-    #                 rnn.state_dict(),
-    #                 f"{settings.rnn_dir}/{settings.pytorch_model_name}.pt",
-    #             )
-
-    # lu.print_green("Finished training")
-
-    # training_time = time() - training_start_time
-
-    # tu.save_training_results(settings, d_monitor_val, training_time)
+        print("Train numpu", mse_train)
+        print("Val numpu", mse_val)
 
 
 def save_normalizations(settings):

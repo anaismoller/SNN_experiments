@@ -204,6 +204,8 @@ def train():
     model = VanillaRNN(input_size).to(DEVICE)
     opt = torch.optim.Adam(model.parameters(), lr=1e-3)
 
+    print(model)
+
     ###############################
     # Begin training
     ###############################
