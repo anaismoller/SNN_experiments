@@ -642,16 +642,9 @@ def get_evaluation_metrics(settings, list_data, model, sample_size=None):
         # Regression
         pred_peak_tensor = outpeak
         # reshape (B,L) 
-        pred_peak_reshaped = pred_peak_tensor.squeeze(-1).transpose(1,0)
-        target_peak_reshaped = target_tensor_peak.squeeze(-1).transpose(1,0)
-        # Revert sort
-        pred_peak_reshaped = pred_peak_reshaped[idxs_rev_sort]
-        target_peak_reshaped = target_peak_reshaped[idxs_rev_sort]
-        peak_mask_reshaped = peak_mask[idxs_rev_sort]
-        # Flatten & convert to numpy array
-        pred_peak_numpy = pred_peak_reshaped.reshape(-1).data.cpu().numpy()
-        target_peak_numpy = target_peak_reshaped.reshape(-1).data.cpu().numpy()
-        peak_mask_numpy = peak_mask_reshaped.reshape(-1).data.cpu().numpy()
+        pred_peak_numpy = pred_peak_tensor.view(-1).data.cpu().numpy()
+        target_peak_numpy = target_tensor_peak.view(-1).data.cpu().numpy()
+        peak_mask_numpy = peak_mask.view(-1).data.cpu().numpy()
         
         # save for later
         list_pred_peak.append(pred_peak_numpy)
@@ -685,10 +678,9 @@ def get_evaluation_metrics(settings, list_data, model, sample_size=None):
     log_loss = metrics.log_loss(targets_class_2D, preds_class)
 
     # regression metrics
-    reg_loss = (np.power(preds_peak-targets_peak,2)*targets_peak_mask).sum()/targets_peak_mask.sum()
     MSE = np.power((preds_peak-targets_peak)*targets_peak_mask,2).sum()/targets_peak_mask.sum()
 
-    d_losses = {"AUC": auc, "Acc": acc, "loss": log_loss, "reg_MSE": MSE,"reg_loss": reg_loss}
+    d_losses = {"AUC": auc, "Acc": acc, "loss": log_loss, "reg_MSE": MSE}
 
     if len(list_kl) != 0:
         d_losses["KL"] = np.mean(list_kl)

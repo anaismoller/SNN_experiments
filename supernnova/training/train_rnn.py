@@ -135,8 +135,8 @@ def train_cyclic(settings):
 
     # Keep track of losses for plotting
     loss_str = ""
-    d_monitor_train = {"loss": [], "AUC": [], "Acc": [], "epoch": [], "reg_MSE":[],"reg_loss": []}
-    d_monitor_val = {"loss": [], "AUC": [], "Acc": [], "epoch": [], "reg_MSE":[], "reg_loss": []}
+    d_monitor_train = {"loss": [], "AUC": [], "Acc": [], "epoch": [], "reg_MSE":[]}
+    d_monitor_val = {"loss": [], "AUC": [], "Acc": [], "epoch": [], "reg_MSE":[]}
     if "bayesian" in settings.pytorch_model_name:
         d_monitor_train["KL"] = []
         d_monitor_val["KL"] = []
@@ -272,8 +272,8 @@ def train(settings):
 
     # Keep track of losses for plotting
     loss_str = ""
-    d_monitor_train = {"loss": [], "AUC": [], "Acc": [], "epoch": [], "reg_MSE":[],"reg_loss": []}
-    d_monitor_val = {"loss": [], "AUC": [], "Acc": [], "epoch": [], "reg_MSE":[], "reg_loss": []}
+    d_monitor_train = {"loss": [], "AUC": [], "Acc": [], "epoch": [], "reg_MSE":[]}
+    d_monitor_val = {"loss": [], "AUC": [], "Acc": [], "epoch": [], "reg_MSE":[]}
     if "bayesian" in settings.pytorch_model_name:
         d_monitor_train["KL"] = []
         d_monitor_val["KL"] = []
