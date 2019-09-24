@@ -89,6 +89,8 @@ def unnormalize_arr(arr, settings, normalize_peak = False):
         elif settings.peak_norm == 'log':
             arr_to_unnorm = arr_to_unnorm * arr_std + arr_mean
             arr_unnormed = np.exp(arr_to_unnorm) + arr_min - 1E-5
+        else:
+            arr_unnormed = arr_to_unnorm
         arr = arr_unnormed
     else:
         arr_min = settings.arr_norm[:-1, 0]
