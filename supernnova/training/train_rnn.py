@@ -141,6 +141,10 @@ def get_evaluation_metrics(settings, list_data, model, sample_size=None):
     list_pred_peak = []
     list_mask = []
 
+    list_target_peak2 = []
+    list_pred_peak2 = []
+    list_mask2 = []
+
     num_elem = len(list_data)
     num_batches = num_elem // min(num_elem // 2, settings.batch_size)
     list_batches = np.array_split(np.arange(num_elem), num_batches)
@@ -154,9 +158,42 @@ def get_evaluation_metrics(settings, list_data, model, sample_size=None):
 
     for batch_idxs in list_batches:
         with torch.no_grad():
+            model.eval()
             X, Y, X_mask = get_data_batch(list_data, batch_idxs, settings)
             Y_pred = model(X, X_mask)
 
+            # from SNN
+            packed_tensor, X_tensor, target_tensor, idxs_rev_sort = tu.get_data_batch(
+            list_data, batch_idxs, settings
+            )
+            
+            outpeak = model(X_tensor,X_mask)
+            np.testing.assert_array_equal(outpeak.view(-1).numpy(),Y_pred.view(-1).numpy())
+            np.testing.assert_array_equal(target_tensor[1].view(-1).numpy(),Y.view(-1).numpy())
+            #
+            # works! which means it is not batching
+            # could be the eval_step, to be proved
+
+            # from SNN
+            # ni with reverse sort ni without it I get the same answer
+            # the problem is how tensor is aranged 
+            # thibs Y = [a,b,c],[d,e,f]
+            # mine is [a,d,][b,c]
+            target_tensor_class, target_tensor_peak = target_tensor
+            pred_peak_tensor = outpeak
+            # reshape (B,L) 
+            pred_peak_reshaped = pred_peak_tensor.view(-1)
+            target_peak_reshaped = target_tensor_peak.view(-1)
+            peak_mask_reshaped = X_mask.view(-1)
+            # Flatten & convert to numpy array
+            pred_peak_numpy = pred_peak_reshaped.data.cpu().numpy()
+            target_peak_numpy = target_peak_reshaped.data.cpu().numpy()
+            peak_mask_numpy = peak_mask_reshaped.data.cpu().numpy()
+
+            list_pred_peak2.append(pred_peak_numpy)
+            list_target_peak2.append(target_peak_numpy)
+            list_mask2.append(peak_mask_numpy)
+            
             list_target_peak.append(Y.view(-1).cpu().numpy())
             list_pred_peak.append(Y_pred.view(-1).cpu().numpy())
             list_mask.append(X_mask.view(-1).cpu().numpy())
@@ -165,10 +202,15 @@ def get_evaluation_metrics(settings, list_data, model, sample_size=None):
     targets_peak = np.concatenate(list_target_peak)
     mask = np.concatenate(list_mask)
 
-    # regression metrics
-    MSE = (np.power((preds_peak - targets_peak), 2) * mask).sum() / mask.sum()
+    preds_peak2 = np.concatenate(list_pred_peak2)
+    targets_peak2 = np.concatenate(list_target_peak2)
+    mask2 = np.concatenate(list_mask2)
 
-    return MSE
+    # regression metrics
+    MSE = (np.power((preds_peak - targets_peak), 2)*mask).sum() / mask.sum()
+    MSE2 = (np.power((preds_peak2 - targets_peak2), 2)*mask2).sum() / mask2.sum()
+
+    return MSE2
 
 
 def train(settings):
