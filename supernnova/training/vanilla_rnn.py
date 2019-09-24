@@ -28,10 +28,10 @@ class VanillaRNN(torch.nn.Module):
             input_size,
             self.hidden_size,
             num_layers=self.num_layers,
-            dropout=self.dropout,
+            dropout=0,#self.dropout,
             bidirectional=self.bidirectional,
         )
-        self.output_dropout_layer = torch.nn.Dropout(self.dropout)
+        # self.output_dropout_layer = torch.nn.Dropout(self.dropout)
         self.output_class_layer = torch.nn.Linear(
             last_input_size, self.output_size)
         # regression does not use mean vs standard outputs
@@ -103,12 +103,14 @@ class VanillaRNN(torch.nn.Module):
             # if array 1D = 0 1 2 3
             # max_len = 4
             maskpeak = (mask.float() < lens).float()
+            # reshape mask to match outpeak
+            maskpeak = maskpeak.transpose(1,0).contiguous()
         else:
             outpeak = self.output_peak_layer(x)
             maskpeak = None
 
         # apply dropout
-        x_class = self.output_dropout_layer(x_class)
+        # x_class = self.output_dropout_layer(x_class)
         # Final projection layer
         outclass = self.output_class_layer(x_class)
 

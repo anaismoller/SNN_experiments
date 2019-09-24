@@ -491,18 +491,18 @@ def train_step(
     outclass, outpeak, mask = rnn(packed_tensor)
     lossclass = criterion_class(outclass.squeeze(), target_class)
 
-    # reshape the outputs to (B,L)
-    outpeak = outpeak.squeeze(-1).transpose(1,0)
-    target_peak = target_peak.squeeze(-1).transpose(1,0)
+    # reshape the outputs to (L,B)
+    outpeak = outpeak.squeeze(-1)
+    target_peak = target_peak.squeeze(-1)
 
     # TEMPORARY
-    # tmp mask only using last element
-    tmp = torch.zeros(mask.shape)
-    # find length of last element in mask
-    max_lengths = (mask==1).sum(dim=1) - 1
-    for i in range(tmp.size(0)):
-        tmp[i][int(max_lengths[i])]=1
-    mask = tmp
+    # # tmp mask only using last element
+    # tmp = torch.zeros(mask.shape)
+    # # find length of last element in mask
+    # max_lengths = (mask==1).sum(dim=1) - 1
+    # for i in range(tmp.size(0)):
+    #     tmp[i][int(max_lengths[i])]=1
+    # mask = tmp
 
     if settings.use_cuda:
         outpeak = outpeak.cuda()
@@ -510,7 +510,7 @@ def train_step(
         mask = mask.cuda()
 
     # compute masked MSE
-    losspeak = ((outpeak-target_peak).pow(2)*mask).sum()/mask.sum()
+    losspeak = ((outpeak.view(-1)-target_peak.view(-1)).pow(2)*mask.view(-1)).sum()/mask.view(-1).sum()
 
     # Special case for BayesianRNN, need to use KL loss
     if isinstance(rnn, bayesian_rnn.BayesianRNN):
@@ -524,7 +524,6 @@ def train_step(
     # Backward pass
     loss.backward()
     optimizer.step()
-
     return loss
 
 
@@ -619,6 +618,8 @@ def get_evaluation_metrics(settings, list_data, model, sample_size=None):
         settings.random_length = random_length
         outclass, outpeak, peak_mask = eval_step(model, packed_tensor, X_tensor.size(1))
 
+        losspeak = ((outpeak.view(-1)-target_tensor[1].view(-1)).pow(2)*peak_mask.view(-1)).sum()/peak_mask.view(-1).sum()
+
         if "bayesian" in settings.pytorch_model_name:
             list_kl.append(model.kl.detach().cpu().item())
 
@@ -645,6 +646,8 @@ def get_evaluation_metrics(settings, list_data, model, sample_size=None):
         pred_peak_numpy = pred_peak_tensor.view(-1).data.cpu().numpy()
         target_peak_numpy = target_tensor_peak.view(-1).data.cpu().numpy()
         peak_mask_numpy = peak_mask.view(-1).data.cpu().numpy()
+
+        losspeak_numpy = (np.power((pred_peak_numpy-target_peak_numpy),2)*peak_mask_numpy).sum()/peak_mask_numpy.sum()
         
         # save for later
         list_pred_peak.append(pred_peak_numpy)
