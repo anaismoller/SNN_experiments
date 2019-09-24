@@ -207,21 +207,21 @@ class ExperimentSettings:
                         f for f in self.all_features if "HOSTGAL_SPECZ" in f
                     ]
 
-                self.training_features = [
-                    "FLUXCAL_g",
-                    "FLUXCAL_i",
-                    "FLUXCAL_r",
-                    "FLUXCAL_z",
-                    "FLUXCALERR_g",
-                    "FLUXCALERR_i",
-                    "FLUXCALERR_r",
-                    "FLUXCALERR_z",
-                    "delta_time",
-                ]
+                # self.training_features = [
+                #     "FLUXCAL_g",
+                #     "FLUXCAL_i",
+                #     "FLUXCAL_r",
+                #     "FLUXCAL_z",
+                #     "FLUXCALERR_g",
+                #     "FLUXCALERR_i",
+                #     "FLUXCALERR_r",
+                #     "FLUXCALERR_z",
+                #     "delta_time",
+                # ]
 
-                # self.training_features = (
-                #     self.non_redshift_features + self.redshift_features
-                # )
+                self.training_features = (
+                    self.non_redshift_features + self.redshift_features
+                )
 
     def set_database_file_names(self):
         """Create a unique database name based on the dataset required

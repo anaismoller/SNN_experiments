@@ -94,14 +94,14 @@ class VanillaRNN(torch.nn.Module):
             x_unpacked, lens = torch.nn.utils.rnn.pad_packed_sequence(x)
             outpeak = self.output_peak_layer(x_unpacked)
             # now I need to mask padded values
-            mask = torch.arange(lens.max().item()).view(1, -1)
-            lens = lens.view(-1, 1).float()
+            mask = torch.arange(lens.max().item()).view(1, -1).to(outpeak.device)
+            lens = lens.view(-1, 1).float().to(outpeak.device)
             # lens == (B, 1)
             # torch.arange == (1, max_len)
             # mask (B, max_len)
             # if array 1D = 0 1 2 3
             # max_len = 4
-            maskpeak = (mask.float() < lens).float()
+            maskpeak = (mask.float() < lens).float().transpose(1, 0).contiguous()
         else:
             outpeak = self.output_peak_layer(x)
             maskpeak = None

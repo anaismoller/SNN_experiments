@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 plt.switch_backend("agg")
 
 
-def normalize_arr(arr, settings, normalize_peak = False):
+def normalize_arr(arr, settings, normalize_peak=False):
     """Normalize array before input to RNN
 
     - Log transform
@@ -40,10 +40,10 @@ def normalize_arr(arr, settings, normalize_peak = False):
         arr_std = settings.arr_norm[-1, 2]
         arr_to_norm = arr
 
-        if settings.peak_norm == 'basic':
+        if settings.peak_norm == "basic":
             arr_normed = (arr_to_norm - arr_mean) / arr_std
 
-        elif settings.peak_norm == 'log':
+        elif settings.peak_norm == "log":
             arr_to_norm = np.clip(arr_to_norm, arr_min, np.inf)
             arr_normed = np.log(arr_to_norm - arr_min + 1e-5)
             arr_normed = (arr_normed - arr_mean) / arr_std
@@ -65,7 +65,7 @@ def normalize_arr(arr, settings, normalize_peak = False):
     return arr
 
 
-def unnormalize_arr(arr, settings, normalize_peak = False):
+def unnormalize_arr(arr, settings, normalize_peak=False):
     """UnNormalize array
 
     Args:
@@ -84,11 +84,11 @@ def unnormalize_arr(arr, settings, normalize_peak = False):
         arr_mean = settings.arr_norm[-1, 1]
         arr_std = settings.arr_norm[-1, 2]
         arr_to_unnorm = arr
-        if settings.peak_norm == 'basic':
-            arr_unnormed = (arr_to_unnorm * arr_std)+arr_mean
-        elif settings.peak_norm == 'log':
+        if settings.peak_norm == "basic":
+            arr_unnormed = (arr_to_unnorm * arr_std) + arr_mean
+        elif settings.peak_norm == "log":
             arr_to_unnorm = arr_to_unnorm * arr_std + arr_mean
-            arr_unnormed = np.exp(arr_to_unnorm) + arr_min - 1E-5
+            arr_unnormed = np.exp(arr_to_unnorm) + arr_min - 1e-5
         else:
             arr_unnormed = arr_to_unnorm
         arr = arr_unnormed
@@ -98,7 +98,7 @@ def unnormalize_arr(arr, settings, normalize_peak = False):
         arr_std = settings.arr_norm[:-1, 2]
         arr_to_unnorm = arr[:, settings.idx_features_to_normalize]
         arr_to_unnorm = arr_to_unnorm * arr_std + arr_mean
-        arr_unnormed = np.exp(arr_to_unnorm) + arr_min - 1E-5
+        arr_unnormed = np.exp(arr_to_unnorm) + arr_min - 1e-5
         arr[:, settings.idx_features_to_normalize] = arr_unnormed
 
     return arr
@@ -197,7 +197,6 @@ def load_HDF5(settings, test=False):
         idxs_val = idxs[subset_n_samples // 2 :]
         idxs_test = idxs[subset_n_samples // 2 :]
 
-
         # idxs_train = np.where(hf[dataset_split_key][:] == 0)[0]
         # idxs_val = np.where(hf[dataset_split_key][:] == 1)[0]
         # idxs_test = np.where(hf[dataset_split_key][:] == 2)[0]
@@ -216,7 +215,7 @@ def load_HDF5(settings, test=False):
         lu.print_green("Features used", training_features)
 
         arr_data = hf["data"][:]
-        arr_target = hf['target_2classes'][:], hf["PEAKMJDNORM"][:]
+        arr_target = hf["target_2classes"][:], hf["PEAKMJDNORM"][:]
         arr_SNID = hf["SNID"][:]
 
         list_data_train = fill_data_list(
@@ -387,7 +386,8 @@ def get_data_batch(list_data, idxs, settings, max_lengths=None, OOD=None):
             X_tensor[: X.shape[0], i, :] = torch.FloatTensor(X)
         except Exception:
             X_tensor[: X.shape[0], i, :] = torch.FloatTensor(
-                torch.from_numpy(np.flip(X, axis=0).copy()))
+                torch.from_numpy(np.flip(X, axis=0).copy())
+            )
         # processing targets independently
         target_peak_tensor[: X.shape[0], i, 0] = torch.FloatTensor(target[1])
         list_target_class.append(target[0])
@@ -405,7 +405,7 @@ def get_data_batch(list_data, idxs, settings, max_lengths=None, OOD=None):
         target_tensor_peak = target_peak_tensor
 
     # target tuple
-    target_tensor = target_tensor_class,target_tensor_peak
+    target_tensor = target_tensor_class, target_tensor_peak
 
     # Create a packed sequence
     packed_tensor = nn.utils.rnn.pack_padded_sequence(X_tensor, lengths)
@@ -449,16 +449,16 @@ def train_step(
     lossclass = criterion_class(outclass.squeeze(), target_class)
 
     # reshape the outputs to (B,L)
-    outpeak = outpeak.squeeze(-1).transpose(1,0)
-    target_peak = target_peak.squeeze(-1).transpose(1,0)
+    outpeak = outpeak.squeeze(-1).transpose(1, 0)
+    target_peak = target_peak.squeeze(-1).transpose(1, 0)
 
     # TEMPORARY
     # tmp mask only using last element
     tmp = torch.zeros(mask.shape)
     # find length of last element in mask
-    max_lengths = (mask==1).sum(dim=1) - 1
+    max_lengths = (mask == 1).sum(dim=1) - 1
     for i in range(tmp.size(0)):
-        tmp[i][int(max_lengths[i])]=1
+        tmp[i][int(max_lengths[i])] = 1
     mask = tmp
 
     if settings.use_cuda:
@@ -467,12 +467,12 @@ def train_step(
         mask = mask.cuda()
 
     # compute masked MSE
-    losspeak = ((outpeak-target_peak).pow(2)*mask).sum()/mask.sum()
+    losspeak = ((outpeak - target_peak).pow(2) * mask).sum() / mask.sum()
 
     # Special case for BayesianRNN, need to use KL loss
     if isinstance(rnn, bayesian_rnn.BayesianRNN):
         lossclass = lossclass + rnn.kl / (num_batches * batch_size)
-    else: # TO DO, this I think can be deprecated
+    else:  # TO DO, this I think can be deprecated
         lossclass = criterion_class(outclass.squeeze(), target_class)
 
     loss = lossclass + losspeak
@@ -518,11 +518,10 @@ def plot_loss(d_train, d_val, epoch, settings):
         settings (ExperimentSettings): custom class to hold hyperparameters
     """
 
-    for key in [k for k in d_train.keys() if k!='epoch']:
+    for key in [k for k in d_train.keys() if k != "epoch"]:
 
         plt.figure()
-        plt.plot(d_train["epoch"], d_train[key],
-                 label="Train %s" % key.title())
+        plt.plot(d_train["epoch"], d_train[key], label="Train %s" % key.title())
         plt.plot(d_val["epoch"], d_val[key], label="Val %s" % key.title())
         plt.legend(loc="best", fontsize=18)
         plt.xlabel("Step", fontsize=22)
@@ -534,8 +533,6 @@ def plot_loss(d_train, d_val, epoch, settings):
         )
         plt.close()
         plt.clf()
-
-
 
 
 def get_loss_string(d_losses_train, d_losses_val):
@@ -658,8 +655,7 @@ def train_and_evaluate_randomforest_model(clf, X_train, y_train, X_val, y_val):
     # Compute AUC and precision
     fpr, tpr, thresholds = metrics.roc_curve(y_val, probas_[:, 1])
     roc_auc = metrics.auc(fpr, tpr)
-    pscore = metrics.precision_score(
-        y_val, clf.predict(X_val), average="binary")
+    pscore = metrics.precision_score(y_val, clf.predict(X_val), average="binary")
     lu.print_green("Validation AUC", roc_auc)
     lu.print_green("Validation precision score", pscore)
 
@@ -668,8 +664,7 @@ def train_and_evaluate_randomforest_model(clf, X_train, y_train, X_val, y_val):
         100 * (sum(clf.predict(X_train) == y_train)) / X_train.shape[0],
     )
     lu.print_green(
-        "Val data accuracy", 100 *
-        (sum(clf.predict(X_val) == y_val)) / X_val.shape[0]
+        "Val data accuracy", 100 * (sum(clf.predict(X_val) == y_val)) / X_val.shape[0]
     )
 
     return clf
@@ -740,3 +735,119 @@ class StopOnPlateau(object):
                     return True
             else:
                 return False
+
+
+def get_evaluation_metrics(settings, list_data, model, sample_size=None):
+    """Compute evaluation metrics on a list of data points
+    Args:
+        settings (ExperimentSettings): custom class to hold hyperparameters
+        list_data (list): contains data to evaluate
+        model (torch.nn Model): pytorch model
+        sample_size (int): subset of the data to use for validation. Default: ``None``
+    Returns:
+        d_losses (dict) maps metrics to their computed value
+    """
+
+    # Validate
+    list_pred_class = []
+    list_pred_peak = []
+    list_target_class = []
+    list_target_peak = []
+    list_target_mask = []
+    list_kl = []
+    num_elem = len(list_data)
+    num_batches = num_elem // min(num_elem // 2, settings.batch_size)
+    list_batches = np.array_split(np.arange(num_elem), num_batches)
+
+    # If required, pick a subset of list batches at random
+    if sample_size:
+        batch_idxs = np.random.permutation(len(list_batches))
+        num_batches = sample_size // min(sample_size // 2, settings.batch_size)
+        batch_idxs = batch_idxs[:num_batches]
+        list_batches = [list_batches[batch_idx] for batch_idx in batch_idxs]
+
+    for batch_idxs in list_batches:
+        random_length = settings.random_length
+        settings.random_length = False
+        packed_tensor, X_tensor, target_tensor, idxs_rev_sort = get_data_batch(
+            list_data, batch_idxs, settings
+        )
+        settings.random_length = random_length
+        outclass, outpeak, peak_mask = eval_step(model, packed_tensor, X_tensor.size(1))
+
+        losspeak = (
+            (outpeak.view(-1) - target_tensor[1].view(-1)).pow(2) * peak_mask.view(-1)
+        ).sum() / peak_mask.view(-1).sum()
+
+        if "bayesian" in settings.pytorch_model_name:
+            list_kl.append(model.kl.detach().cpu().item())
+
+        # fetch targets
+        target_tensor_class, target_tensor_peak = target_tensor
+
+        # Classification
+        # Apply softmax
+        pred_proba = nn.functional.softmax(outclass, dim=1)
+        # Convert to numpy array
+        pred_proba_numpy = pred_proba.data.cpu().numpy()
+        target_class_numpy = target_tensor_class.data.cpu().numpy()
+        # Revert sort
+        pred_proba_numpy = pred_proba_numpy[idxs_rev_sort]
+        target_class_numpy = target_class_numpy[idxs_rev_sort]
+        # save for later
+        list_pred_class.append(pred_proba_numpy)
+        list_target_class.append(target_class_numpy)
+
+        ###
+        # Regression
+        pred_peak_tensor = outpeak
+        # reshape (B,L)
+        pred_peak_numpy = pred_peak_tensor.view(-1).data.cpu().numpy()
+        target_peak_numpy = target_tensor_peak.view(-1).data.cpu().numpy()
+        peak_mask_numpy = peak_mask.view(-1).data.cpu().numpy()
+
+        losspeak_numpy = (
+            np.power((pred_peak_numpy - target_peak_numpy), 2) * peak_mask_numpy
+        ).sum() / peak_mask_numpy.sum()
+
+        # save for later
+        list_pred_peak.append(pred_peak_numpy)
+        list_target_peak.append(target_peak_numpy)
+        list_target_mask.append(peak_mask_numpy)
+
+    targets_class = np.concatenate(list_target_class, axis=0)
+    preds_class = np.concatenate(list_pred_class, axis=0)
+    targets_peak = np.concatenate(list_target_peak, axis=0)
+    targets_peak_mask = np.concatenate(list_target_mask, axis=0)
+    preds_peak = np.concatenate(list_pred_peak, axis=0)
+
+    # Check outputs size
+    assert len(targets_class.shape) == 1
+    assert len(preds_class.shape) == 2
+    assert len(targets_peak.shape) == len(targets_peak_mask.shape)
+    assert len(targets_peak.shape) == len(preds_peak.shape)
+
+    # classification metrics
+    if settings.nb_classes == 2:
+        auc = metrics.roc_auc_score(targets_class, preds_class[:, 1])
+    else:
+        # Can't compute AUC for more than 2 classes
+        auc = None
+    acc = metrics.accuracy_score(targets_class, np.argmax(preds_class, 1))
+    targets_class_2D = np.zeros((targets_class.shape[0], settings.nb_classes))
+    for i in range(targets_class.shape[0]):
+        targets_class_2D[i, targets_class[i]] = 1
+    log_loss = metrics.log_loss(targets_class_2D, preds_class)
+
+    # regression metrics
+    MSE = (
+        np.power((preds_peak - targets_peak) * targets_peak_mask, 2).sum()
+        / targets_peak_mask.sum()
+    )
+
+    d_losses = {"AUC": auc, "Acc": acc, "loss": log_loss, "reg_MSE": MSE}
+
+    if len(list_kl) != 0:
+        d_losses["KL"] = np.mean(list_kl)
+
+    return d_losses

@@ -120,7 +120,7 @@ def get_data_batch(list_data, batch_idxs, settings):
         torch.arange(max_length).view(1, -1).to(DEVICE) < lengths.view(-1, 1)
     ).float()
 
-    return X, Y, X_mask
+    return X, Y, X_mask.transpose(1, 0).contiguous()
 
 
 def get_evaluation_metrics(settings, list_data, model, sample_size=None):
@@ -155,7 +155,31 @@ def get_evaluation_metrics(settings, list_data, model, sample_size=None):
     for batch_idxs in list_batches:
         with torch.no_grad():
             X, Y, X_mask = get_data_batch(list_data, batch_idxs, settings)
-            Y_pred = model(X, X_mask)
+            # lengths = X_mask.sum(dim=-1).long()
+            # # Pack
+            # x_packed = torch.nn.utils.rnn.pack_padded_sequence(
+            #     X, lengths, batch_first=False, enforce_sorted=True
+            # )
+
+            packed_tensor, X_tensor, target_tensor, idxs_rev_sort = tu.get_data_batch(
+                list_data, batch_idxs, settings
+            )
+
+            assert np.all(
+                np.ravel(X_tensor.detach().cpu().numpy())
+                == np.ravel(X.detach().cpu().numpy())
+            )
+            assert np.all(
+                np.ravel(Y.detach().cpu().numpy())
+                == np.ravel(target_tensor[1].detach().cpu().numpy())
+            )
+
+            _, Y_pred, mask_pred = model(packed_tensor)
+
+            assert np.all(
+                np.ravel(mask_pred.detach().cpu().numpy())
+                == np.ravel(X_mask.detach().cpu().numpy())
+            )
 
             list_target_peak.append(Y.view(-1).cpu().numpy())
             list_pred_peak.append(Y_pred.view(-1).cpu().numpy())
@@ -184,7 +208,8 @@ def train(settings):
     # Data
     list_data_train, list_data_val = tu.load_HDF5(settings, test=False)
     # Model specification
-    rnn = VanillaRNN(len(settings.training_features))
+    rnn = tu.get_model(settings, len(settings.training_features))
+    # rnn = VanillaRNN(len(settings.training_features))
     criterion = nn.CrossEntropyLoss()
     optimizer = tu.get_optimizer(settings, rnn)
 
@@ -213,13 +238,36 @@ def train(settings):
 
         batch_losses = []
 
+        rnn.train()
+
         for batch_idxs in list_batches:
 
-            # Sample a batch in packed sequence form
             X, Y, X_mask = get_data_batch(list_data_train, batch_idxs, settings)
-            # Train step : forward backward pass
+            # lengths = X_mask.sum(dim=-1).long()
+            # # Pack
+            # x_packed = torch.nn.utils.rnn.pack_padded_sequence(
+            #     X, lengths, batch_first=False, enforce_sorted=True
+            # )
 
-            Y_pred = rnn(X, X_mask)
+            packed_tensor, X_tensor, target_tensor, idxs_rev_sort = tu.get_data_batch(
+                list_data_train, batch_idxs, settings
+            )
+
+            _, Y_pred, mask_pred = rnn(packed_tensor)
+
+            assert np.all(
+                np.ravel(X_tensor.detach().cpu().numpy())
+                == np.ravel(X.detach().cpu().numpy())
+            )
+            assert np.all(
+                np.ravel(Y.detach().cpu().numpy())
+                == np.ravel(target_tensor[1].detach().cpu().numpy())
+            )
+
+            assert np.all(
+                np.ravel(mask_pred.detach().cpu().numpy())
+                == np.ravel(X_mask.detach().cpu().numpy())
+            )
 
             # Loss
             Y = Y.view(-1)
@@ -249,11 +297,32 @@ def train(settings):
 
             with torch.no_grad():
 
-                # Sample a batch in packed sequence form
                 X, Y, X_mask = get_data_batch(list_data_val, batch_idxs, settings)
-                # Train step : forward backward pass
+                # lengths = X_mask.sum(dim=-1).long()
+                # # Pack
+                # x_packed = torch.nn.utils.rnn.pack_padded_sequence(
+                #     X, lengths, batch_first=False, enforce_sorted=True
+                # )
 
-                Y_pred = rnn(X, X_mask)
+                packed_tensor, X_tensor, target_tensor, idxs_rev_sort = tu.get_data_batch(
+                    list_data_val, batch_idxs, settings
+                )
+
+                _, Y_pred, mask_pred = rnn(packed_tensor)
+
+                assert np.all(
+                    np.ravel(X_tensor.detach().cpu().numpy())
+                    == np.ravel(X.detach().cpu().numpy())
+                )
+                assert np.all(
+                    np.ravel(Y.detach().cpu().numpy())
+                    == np.ravel(target_tensor[1].detach().cpu().numpy())
+                )
+
+                assert np.all(
+                    np.ravel(mask_pred.detach().cpu().numpy())
+                    == np.ravel(X_mask.detach().cpu().numpy())
+                )
 
             # Loss
             Y = Y.view(-1)
@@ -267,18 +336,29 @@ def train(settings):
         loss = np.mean(batch_losses)
         d_monitor_val["reg_MSE"].append(loss)
 
-        print()
-        print("Train", d_monitor_train["reg_MSE"][-1])
-        print("Val", d_monitor_val["reg_MSE"][-1])
-
         # Get metrics (subsample training set to same size as validation set for speed)
         mse_train = get_evaluation_metrics(
             settings, list_data_train, rnn, sample_size=len(list_data_val)
         )
         mse_val = get_evaluation_metrics(settings, list_data_val, rnn, sample_size=None)
 
+        d_train = tu.get_evaluation_metrics(
+            settings, list_data_train, rnn, sample_size=len(list_data_val)
+        )["reg_MSE"]
+        d_val = tu.get_evaluation_metrics(
+            settings, list_data_val, rnn, sample_size=None
+        )["reg_MSE"]
+
+        print()
+        print()
+        print()
+        print("Train", d_monitor_train["reg_MSE"][-1])
         print("Train numpu", mse_train)
+        print("Train other", d_train)
+        print()
+        print("Val", d_monitor_val["reg_MSE"][-1])
         print("Val numpu", mse_val)
+        print("Val other", d_val)
 
 
 def save_normalizations(settings):
