@@ -74,10 +74,12 @@ def data_loader(settings):
         config_name = f"{settings.source_data}_{settings.nb_classes}classes"
 
         n_samples = hf["data"].shape[0]
+        subset_n_samples = int(n_samples*settings.data_fraction)
 
-        idxs = np.random.permutation(n_samples)
-        idxs_train = idxs[: n_samples // 2][:50]
-        idxs_val = idxs[n_samples // 2 :][:50]
+        idxs = np.random.permutation(n_samples)[:subset_n_samples]
+        idxs = idxs[:]
+        idxs_train = idxs[: subset_n_samples // 2]
+        idxs_val = idxs[subset_n_samples // 2 :]
 
         n_features = hf["data"].attrs["n_features"]
 
@@ -114,7 +116,7 @@ def batch_loop(model, opt, list_data, list_features, grad_enabled=True):
     device = "cpu" if not torch.cuda.is_available() else "cuda"
 
     input_size = len(list_features)
-    batch_size = 32
+    batch_size = 500
     n_samples = len(list_data)
     num_batches = max(1, n_samples // batch_size)
     list_batches = np.array_split(np.arange(n_samples), num_batches)
@@ -177,12 +179,15 @@ def train():
 
     Args:
         settings (ExperimentSettings): controls experiment hyperparameters
+        device (str): default cpu else cuda
+        debug (Bool): if debug just run 10 epochs
     """
 
     # Get conf parameters
     settings = conf.get_settings()
 
-    device = "cpu" if not torch.cuda.is_available() else "cuda"
+    # device = "cpu" if not torch.cuda.is_available() else "cuda"
+    device = 'cuda' if settings.use_cuda else 'cpu'
 
     list_data_train, list_data_val = data_loader(settings)
 
@@ -209,7 +214,7 @@ def train():
     epoch_train_losses = []
     epoch_valid_losses = []
 
-    for epoch in range(10000):
+    for epoch in range(settings.nb_epoch):
 
         train_loss = batch_loop(
             model, opt, list_data_train, list_features, grad_enabled=True
@@ -221,24 +226,29 @@ def train():
         epoch_train_losses.append(train_loss)
         epoch_valid_losses.append(valid_loss)
 
-        print(f"Training loss: {train_loss:.2f} -- Valid loss: {valid_loss:.2f}")
+        print(f"{epoch} Training loss: {train_loss:.2f} -- Valid loss: {valid_loss:.2f}")
 
         plt.figure()
         plt.plot(epoch_train_losses, label="Train loss")
         plt.plot(epoch_valid_losses, label="Valid loss")
         plt.legend()
-        plt.savefig("loss_peak.png")
+        plt.savefig(f"{settings.dump_dir}/models/loss_peak.png")
         plt.clf()
         plt.close("all")
 
-        if epoch % 200 == 0:
-            plot_predictions(model, list_data_train, list_features, "train")
-            plot_predictions(model, list_data_val, list_features, "val")
+        if epoch % 10 == 0:
+            plot_predictions(model, list_data_train, list_features, "train", settings)
+            plot_predictions(model, list_data_val, list_features, "val", settings)
+            
+            torch.save(
+                        model.state_dict(),
+                        f"{settings.dump_dir}/models/model.pt",
+                    )
 
+def plot_predictions(model, list_data, list_features, title, settings):
 
-def plot_predictions(model, list_data, list_features, title):
-
-    device = "cpu" if not torch.cuda.is_available() else "cuda"
+    # device = "cpu" if not torch.cuda.is_available() else "cuda"
+    device = 'cuda' if settings.use_cuda else 'cpu'
 
     input_size = len(list_features)
     idxs = np.random.choice(len(list_data), 8)
@@ -303,7 +313,7 @@ def plot_predictions(model, list_data, list_features, title):
         # predicted
         ax.plot(df["time"], Y_pred[idx, : len(df)], color="C0")
 
-        plt.savefig(f"figures/lightcurve_{title}_{idx}.png")
+        plt.savefig(f"tests/dump/lightcurves/{title}_{idx}.png")
 
 
 if __name__ == "__main__":
