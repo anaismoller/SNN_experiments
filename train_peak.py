@@ -20,6 +20,8 @@ import torch
 import torch.nn.functional as F
 from supernnova.utils.visualization_utils import FILTER_COLORS
 
+DEVICE = "cpu" if not torch.cuda.is_available() else "cuda"
+
 
 class VanillaRNN(torch.nn.Module):
     def __init__(self, input_size):
@@ -28,7 +30,7 @@ class VanillaRNN(torch.nn.Module):
         # Define layers
         self.rnn_layer = torch.nn.LSTM(
             input_size,
-            32,
+            128,
             num_layers=2,
             dropout=0,
             bidirectional=True,
@@ -36,7 +38,7 @@ class VanillaRNN(torch.nn.Module):
         )
         # self.output_class_layer = torch.nn.Linear()
         # # regression does not use mean vs standard outputs
-        self.output_peak_layer = torch.nn.Linear(2 * 32, 1)
+        self.output_peak_layer = torch.nn.Linear(2 * 128, 1)
 
     def forward(self, x, x_mask):
 
@@ -74,7 +76,7 @@ def data_loader(settings):
         config_name = f"{settings.source_data}_{settings.nb_classes}classes"
 
         n_samples = hf["data"].shape[0]
-        subset_n_samples = int(n_samples*settings.data_fraction)
+        subset_n_samples = int(n_samples * settings.data_fraction)
 
         idxs = np.random.permutation(n_samples)[:subset_n_samples]
         idxs = idxs[:]
@@ -113,10 +115,8 @@ def data_loader(settings):
 
 def batch_loop(model, opt, list_data, list_features, grad_enabled=True):
 
-    device = "cpu" if not torch.cuda.is_available() else "cuda"
-
     input_size = len(list_features)
-    batch_size = 500
+    batch_size = 128
     n_samples = len(list_data)
     num_batches = max(1, n_samples // batch_size)
     list_batches = np.array_split(np.arange(n_samples), num_batches)
@@ -143,12 +143,12 @@ def batch_loop(model, opt, list_data, list_features, grad_enabled=True):
 
         torch.set_grad_enabled(grad_enabled)
 
-        X = torch.from_numpy(X).to(device)
-        Y = torch.from_numpy(Y).to(device)
-        lengths = torch.from_numpy(lengths).to(device)
+        X = torch.from_numpy(X).to(DEVICE)
+        Y = torch.from_numpy(Y).to(DEVICE)
+        lengths = torch.from_numpy(lengths).to(DEVICE)
 
         X_mask = (
-            torch.arange(max_length).view(1, -1).to(device) < lengths.view(-1, 1)
+            torch.arange(max_length).view(1, -1).to(DEVICE) < lengths.view(-1, 1)
         ).float()
 
         Y_pred = model(X, X_mask)
@@ -167,8 +167,7 @@ def batch_loop(model, opt, list_data, list_features, grad_enabled=True):
 
         batch_losses.append(losspeak.item())
 
-        torch.set_grad_enabled(True)
-
+    torch.set_grad_enabled(True)
     loss = np.mean(batch_losses)
 
     return loss
@@ -179,15 +178,12 @@ def train():
 
     Args:
         settings (ExperimentSettings): controls experiment hyperparameters
-        device (str): default cpu else cuda
+        DEVICE (str): default cpu else cuda
         debug (Bool): if debug just run 10 epochs
     """
 
     # Get conf parameters
     settings = conf.get_settings()
-
-    # device = "cpu" if not torch.cuda.is_available() else "cuda"
-    device = 'cuda' if settings.use_cuda else 'cpu'
 
     list_data_train, list_data_val = data_loader(settings)
 
@@ -205,7 +201,7 @@ def train():
 
     input_size = len(list_features)
 
-    model = VanillaRNN(input_size).to(device)
+    model = VanillaRNN(input_size).to(DEVICE)
     opt = torch.optim.Adam(model.parameters(), lr=1e-3)
 
     ###############################
@@ -226,7 +222,9 @@ def train():
         epoch_train_losses.append(train_loss)
         epoch_valid_losses.append(valid_loss)
 
-        print(f"{epoch} Training loss: {train_loss:.2f} -- Valid loss: {valid_loss:.2f}")
+        print(
+            f"{epoch} Training loss: {train_loss:.2f} -- Valid loss: {valid_loss:.2f}"
+        )
 
         plt.figure()
         plt.plot(epoch_train_losses, label="Train loss")
@@ -237,18 +235,13 @@ def train():
         plt.close("all")
 
         if epoch % 10 == 0:
-            plot_predictions(model, list_data_train, list_features, "train", settings)
-            plot_predictions(model, list_data_val, list_features, "val", settings)
-            
-            torch.save(
-                        model.state_dict(),
-                        f"{settings.dump_dir}/models/model.pt",
-                    )
+            plot_predictions(model, list_data_train, list_features, "train")
+            plot_predictions(model, list_data_val, list_features, "val")
 
-def plot_predictions(model, list_data, list_features, title, settings):
+            torch.save(model.state_dict(), f"{settings.dump_dir}/models/model.pt")
 
-    # device = "cpu" if not torch.cuda.is_available() else "cuda"
-    device = 'cuda' if settings.use_cuda else 'cpu'
+
+def plot_predictions(model, list_data, list_features, title):
 
     input_size = len(list_features)
     idxs = np.random.choice(len(list_data), 8)
@@ -269,12 +262,12 @@ def plot_predictions(model, list_data, list_features, title, settings):
 
     torch.set_grad_enabled(False)
 
-    X = torch.from_numpy(X).to(device)
-    Y = torch.from_numpy(Y).to(device)
-    lengths = torch.from_numpy(lengths).to(device)
+    X = torch.from_numpy(X).to(DEVICE)
+    Y = torch.from_numpy(Y).to(DEVICE)
+    lengths = torch.from_numpy(lengths).to(DEVICE)
 
     X_mask = (
-        torch.arange(max_length).view(1, -1).to(device) < lengths.view(-1, 1)
+        torch.arange(max_length).view(1, -1).to(DEVICE) < lengths.view(-1, 1)
     ).float()
 
     Y = Y.squeeze(-1).cpu().numpy()
