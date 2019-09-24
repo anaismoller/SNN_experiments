@@ -40,10 +40,10 @@ def normalize_arr(arr, settings, normalize_peak=False):
         arr_std = settings.arr_norm[-1, 2]
         arr_to_norm = arr
 
-        if settings.peak_norm == 'basic':
+        if settings.peak_norm == "basic":
             arr_normed = (arr_to_norm - arr_mean) / arr_std
 
-        elif settings.peak_norm == 'log':
+        elif settings.peak_norm == "log":
             arr_to_norm = np.clip(arr_to_norm, arr_min, np.inf)
             arr_normed = np.log(arr_to_norm - arr_min + 1e-5)
             arr_normed = (arr_normed - arr_mean) / arr_std
@@ -84,11 +84,11 @@ def unnormalize_arr(arr, settings, normalize_peak=False):
         arr_mean = settings.arr_norm[-1, 1]
         arr_std = settings.arr_norm[-1, 2]
         arr_to_unnorm = arr
-        if settings.peak_norm == 'basic':
-            arr_unnormed = (arr_to_unnorm * arr_std)+arr_mean
-        elif settings.peak_norm == 'log':
+        if settings.peak_norm == "basic":
+            arr_unnormed = (arr_to_unnorm * arr_std) + arr_mean
+        elif settings.peak_norm == "log":
             arr_to_unnorm = arr_to_unnorm * arr_std + arr_mean
-            arr_unnormed = np.exp(arr_to_unnorm) + arr_min - 1E-5
+            arr_unnormed = np.exp(arr_to_unnorm) + arr_min - 1e-5
         else:
             arr_unnormed = arr_to_unnorm
         arr = arr_unnormed
@@ -98,7 +98,7 @@ def unnormalize_arr(arr, settings, normalize_peak=False):
         arr_std = settings.arr_norm[:-1, 2]
         arr_to_unnorm = arr[:, settings.idx_features_to_normalize]
         arr_to_unnorm = arr_to_unnorm * arr_std + arr_mean
-        arr_unnormed = np.exp(arr_to_unnorm) + arr_min - 1E-5
+        arr_unnormed = np.exp(arr_to_unnorm) + arr_min - 1e-5
         arr[:, settings.idx_features_to_normalize] = arr_unnormed
 
     return arr
@@ -148,7 +148,8 @@ def fill_data_list(
         # normalize peak
         if settings.peak_norm:
             target_lc_peak = normalize_arr(
-                target_lc_peak, settings, normalize_peak=True)
+                target_lc_peak, settings, normalize_peak=True
+            )
 
         target = (target_class, target_lc_peak)
         lc = int(arr_SNID[i])
@@ -160,13 +161,14 @@ def fill_data_list(
         # using clipping in case of min<model_min
         X_clip = X_all.copy()
         X_clip = np.clip(
-            X_clip[:, settings.idx_features_to_normalize], settings.arr_norm[:-1, 0], np.inf)
+            X_clip[:, settings.idx_features_to_normalize],
+            settings.arr_norm[:-1, 0],
+            np.inf,
+        )
         X_all[:, settings.idx_features_to_normalize] = X_clip
 
-        X_tmp = unnormalize_arr(normalize_arr(
-            X_all.copy(), settings), settings)
-        assert np.all(
-            np.all(np.isclose(np.ravel(X_all), np.ravel(X_tmp), atol=1e-1)))
+        X_tmp = unnormalize_arr(normalize_arr(X_all.copy(), settings), settings)
+        assert np.all(np.all(np.isclose(np.ravel(X_all), np.ravel(X_tmp), atol=1e-1)))
         # Normalize features that need to be normalized
         X_normed = X_all.copy()
         X_normed_tmp = normalize_arr(X_normed, settings)
@@ -219,8 +221,7 @@ def load_HDF5(settings, test=False):
             try:
                 idxs_test = np.where(hf[dataset_split_key][:] == 2)[0]
             except Exception:
-                idxs_test = np.where(
-                    hf['dataset_photometry_2classes'][:] != 100)[0]
+                idxs_test = np.where(hf["dataset_photometry_2classes"][:] != 100)[0]
         else:
             idxs_train = np.where(hf[dataset_split_key][:] == 0)[0]
             idxs_val = np.where(hf[dataset_split_key][:] == 1)[0]
@@ -231,8 +232,7 @@ def load_HDF5(settings, test=False):
             np.random.shuffle(idxs_val)
             np.random.shuffle(idxs_test)
 
-            idxs_train = idxs_train[: int(
-                settings.data_fraction * len(idxs_train))]
+            idxs_train = idxs_train[: int(settings.data_fraction * len(idxs_train))]
 
         n_features = hf["data"].attrs["n_features"]
 
@@ -246,7 +246,7 @@ def load_HDF5(settings, test=False):
             try:
                 arr_target = hf[target_key][:], hf["PEAKMJDNORM"][:]
             except Exception:
-                arr_target = hf['target_2classes'][:], hf["PEAKMJDNORM"][:]
+                arr_target = hf["target_2classes"][:], hf["PEAKMJDNORM"][:]
         else:
             arr_target = hf[target_key][:], hf["PEAKMJDNORM"][:]
         arr_SNID = hf["SNID"][:]
@@ -395,7 +395,7 @@ def get_data_batch(list_data, idxs, settings, max_lengths=None, OOD=None):
             assert settings.random_length is False
             assert settings.random_redshift is False
             X = X[: max_lengths[pos]]
-            target = (target[0], target[1][:max_lengths[pos]])
+            target = (target[0], target[1][: max_lengths[pos]])
         if settings.random_length:
             # random length of lc
             random_length = np.random.randint(1, X.shape[0] + 1)
@@ -405,7 +405,7 @@ def get_data_batch(list_data, idxs, settings, max_lengths=None, OOD=None):
             # random start of light-curve to avoid biasing the peak prediction
             # at least 3 epochs left
             if X.shape[0] > 3:
-                random_start = np.random.randint(0, X.shape[0]-3)
+                random_start = np.random.randint(0, X.shape[0] - 3)
                 X = X[random_start:]
                 target = (target[0], target[1][random_start:])
         if settings.redshift == "zspe" and settings.random_redshift:
@@ -431,7 +431,8 @@ def get_data_batch(list_data, idxs, settings, max_lengths=None, OOD=None):
             X_tensor[: X.shape[0], i, :] = torch.FloatTensor(X)
         except Exception:
             X_tensor[: X.shape[0], i, :] = torch.FloatTensor(
-                torch.from_numpy(np.flip(X, axis=0).copy()))
+                torch.from_numpy(np.flip(X, axis=0).copy())
+            )
         # processing targets independently
         target_peak_tensor[: X.shape[0], i, 0] = torch.FloatTensor(target[1])
         list_target_class.append(target[0])
@@ -511,8 +512,9 @@ def train_step(
         mask = mask.cuda()
 
     # compute masked MSE
-    losspeak = ((outpeak.view(-1)-target_peak.view(-1)).pow(2)
-                * mask.view(-1)).sum()/mask.view(-1).sum()
+    losspeak = (
+        (outpeak.view(-1) - target_peak.view(-1)).pow(2) * mask.view(-1)
+    ).sum() / mask.view(-1).sum()
 
     # Special case for BayesianRNN, need to use KL loss
     if isinstance(rnn, bayesian_rnn.BayesianRNN):
@@ -564,8 +566,7 @@ def plot_loss(d_train, d_val, epoch, settings):
     for key in d_train.keys():
 
         plt.figure()
-        plt.plot(d_train["epoch"], d_train[key],
-                 label="Train %s" % key.title())
+        plt.plot(d_train["epoch"], d_train[key], label="Train %s" % key.title())
         plt.plot(d_val["epoch"], d_val[key], label="Val %s" % key.title())
         plt.legend(loc="best", fontsize=18)
         plt.xlabel("Step", fontsize=22)
@@ -619,8 +620,9 @@ def get_evaluation_metrics(settings, list_data, model, sample_size=None):
         settings.random_length = random_length
         outclass, outpeak, peak_mask = eval_step(model, packed_tensor)
 
-        losspeak = ((outpeak.view(-1)-target_tensor[1].view(-1)).pow(
-            2)*peak_mask.view(-1)).sum()/peak_mask.view(-1).sum()
+        losspeak = (
+            (outpeak.view(-1) - target_tensor[1].view(-1)).pow(2) * peak_mask.view(-1)
+        ).sum() / peak_mask.view(-1).sum()
 
         if "bayesian" in settings.pytorch_model_name:
             list_kl.append(model.kl.detach().cpu().item())
@@ -649,10 +651,13 @@ def get_evaluation_metrics(settings, list_data, model, sample_size=None):
         target_peak_numpy = target_tensor_peak.view(-1).data.cpu().numpy()
         peak_mask_numpy = peak_mask.view(-1).data.cpu().numpy()
 
-        losspeak_numpy = (np.power((pred_peak_numpy-target_peak_numpy), 2)
-                          * peak_mask_numpy).sum()/peak_mask_numpy.sum()
+        losspeak_numpy = (
+            np.power((pred_peak_numpy - target_peak_numpy), 2) * peak_mask_numpy
+        ).sum() / peak_mask_numpy.sum()
 
-        np.testing.assert_almost_equal(losspeak_numpy, float(losspeak.data.numpy()), decimal=1)
+        np.testing.assert_almost_equal(
+            losspeak_numpy, float(losspeak.item()), decimal=1
+        )
 
         # save for later
         list_pred_peak.append(pred_peak_numpy)
@@ -684,8 +689,10 @@ def get_evaluation_metrics(settings, list_data, model, sample_size=None):
     log_loss = metrics.log_loss(targets_class_2D, preds_class)
 
     # regression metrics
-    MSE = np.power((preds_peak-targets_peak)*targets_peak_mask,
-                   2).sum()/targets_peak_mask.sum()
+    MSE = (
+        np.power((preds_peak - targets_peak) * targets_peak_mask, 2).sum()
+        / targets_peak_mask.sum()
+    )
 
     d_losses = {"AUC": auc, "Acc": acc, "loss": log_loss, "reg_MSE": MSE}
 
@@ -815,8 +822,7 @@ def train_and_evaluate_randomforest_model(clf, X_train, y_train, X_val, y_val):
     # Compute AUC and precision
     fpr, tpr, thresholds = metrics.roc_curve(y_val, probas_[:, 1])
     roc_auc = metrics.auc(fpr, tpr)
-    pscore = metrics.precision_score(
-        y_val, clf.predict(X_val), average="binary")
+    pscore = metrics.precision_score(y_val, clf.predict(X_val), average="binary")
     lu.print_green("Validation AUC", roc_auc)
     lu.print_green("Validation precision score", pscore)
 
@@ -825,8 +831,7 @@ def train_and_evaluate_randomforest_model(clf, X_train, y_train, X_val, y_val):
         100 * (sum(clf.predict(X_train) == y_train)) / X_train.shape[0],
     )
     lu.print_green(
-        "Val data accuracy", 100 *
-        (sum(clf.predict(X_val) == y_val)) / X_val.shape[0]
+        "Val data accuracy", 100 * (sum(clf.predict(X_val) == y_val)) / X_val.shape[0]
     )
 
     return clf
