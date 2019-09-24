@@ -1,4 +1,4 @@
-FROM nvidia/cuda:9.0-cudnn7-devel-ubuntu16.04
+FROM nvidia/cuda:10.0-cudnn7-devel-ubuntu18.04
 
 ####################################
 # Apt libraries
@@ -47,8 +47,7 @@ RUN curl -o ~/miniconda.sh -O  https://repo.anaconda.com/miniconda/Miniconda3-la
      ~/miniconda.sh -b -p /home/miniconda3 && \
      rm ~/miniconda.sh
 
-# RUN    /home/miniconda3/bin/conda install -c anaconda tensorflow-gpu
-RUN    /home/miniconda3/bin/conda install -y pytorch==0.4.1 torchvision -c pytorch
+RUN    /home/miniconda3/bin/conda install pytorch torchvision cudatoolkit=10.0 -c pytorch
 RUN    /home/miniconda3/bin/pip install \
      h5py \
      matplotlib \
@@ -65,7 +64,7 @@ RUN    /home/miniconda3/bin/pip install \
     /home/miniconda3/bin/pip install sphinx sphinx-autobuild sphinxcontrib-napoleon sphinx_rtd_theme tabulate
 
 # Extra python packages
-RUN /home/miniconda3/bin/pip install seaborn pytest-sugar pytest-cov mxnet-cu90
+RUN /home/miniconda3/bin/pip install seaborn pytest-sugar pytest-cov
 
 ####################################
 # Set up locale to avoid zsh errors
@@ -80,7 +79,7 @@ ENV LANG en_US.utf8
 ####################################
 RUN git clone https://github.com/robbyrussell/oh-my-zsh.git ${HOME}/.oh-my-zsh
 COPY zshrc ${HOME}/.zshrc
-RUN sed -i 's/❯/Docker❯/g' /home/.oh-my-zsh/themes/refined.zsh-theme
+RUN sed -i 's/❯/Supernnova/g' /home/.oh-my-zsh/themes/refined.zsh-theme
 
 
 ENTRYPOINT ["/bin/zsh"]
