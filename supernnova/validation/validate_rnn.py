@@ -62,7 +62,8 @@ def get_batch_predictions(rnn, X, target,settings):
     arr_target_class = target[0].detach().cpu().numpy()
 
     # regression
-    outpeak = outpeak.squeeze(-1).transpose(1, 0)
+    outpeak = outpeak.squeeze(-1).transpose(1,0)
+    maskpeak = maskpeak.transpose(1,0)
     if torch.cuda.is_available():
         outpeak = outpeak.cuda()
         maskpeak = maskpeak.cuda()
@@ -106,6 +107,7 @@ def get_batch_predictions_MFE(rnn, X, target,settings):
 
     # regression
     outpeak = outpeak.squeeze(-1).transpose(1, 0)
+    maskpeak = maskpeak.transpose(1,0)
     if torch.cuda.is_available():
         outpeak = outpeak.cuda()
         maskpeak = maskpeak.cuda()
